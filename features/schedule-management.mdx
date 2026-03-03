@@ -1,0 +1,319 @@
+---
+title: 'Schedule Management'
+description: 'Configure class times, grace periods, and day-of-week schedules for attendance tracking'
+---
+
+## Overview
+
+Schedule Management allows teachers to define when their classes meet, including start times, grace periods for late arrivals, and specific days of the week. These schedules determine whether students are marked as on-time or late when scanning their QR codes.
+
+## Setting Class Times
+
+Each class can have multiple schedules for different days of the week. Teachers specify the start time and grace period for each scheduled session.
+
+### Schedule Creation
+
+```php manage_schedule.php:40-56
+if (isset($_POST['day']) && isset($_POST['start_time']) && isset($_POST['grace_period'])) {
+    $class_id = $_POST['class_id'];
+    $day = $_POST['day'];
+    $start_time = $_POST['start_time'];
+    $grace_period = $_POST['grace_period'];
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO class_schedules (class_id, day_of_week, start_time, grace_period)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE start_time = ?, grace_period = ?
+        ");
+        $stmt->execute([$class_id, $day, $start_time, $grace_period, $start_time, $grace_period]);
+        $message = "Schedule updated successfully";
+    } catch(PDOException $e) {
+        $error = "Error updating schedule: " . $e->getMessage();
+    }
+}
+```
+
+<Info>
+The `ON DUPLICATE KEY UPDATE` clause allows you to update existing schedules without creating duplicates. If a schedule already exists for that day, it will be updated instead of creating a new entry.
+</Info>
+
+### Schedule Components
+
+<CardGroup cols={3}>
+  <Card title="Day of Week" icon="calendar">
+    Which day the class meets (1=Sunday to 7=Saturday)
+  </Card>
+  <Card title="Start Time" icon="clock">
+    When the class begins (HH:MM format)
+  </Card>
+  <Card title="Grace Period" icon="hourglass">
+    Minutes after start time before marking late
+  </Card>
+</CardGroup>
+
+## Grace Periods
+
+Grace periods define how many minutes after the start time a student can arrive and still be marked as on-time. After the grace period expires, students are automatically marked as late.
+
+### Grace Period Configuration
+
+```php manage_schedule.php:147-149
+<label>Grace Period (minutes):</label>
+<input type="number" name="grace_period" min="0" max="60" value="15" required>
+```
+
+### Grace Period Logic
+
+When attendance is processed, the system compares the current time against the start time plus grace period:
+
+```php process_attendance.php:56-63
+// Get current time
+$currentTime = new DateTime();
+$startTime = new DateTime($schedule['start_time']);
+$graceTime = clone $startTime;
+$graceTime->modify('+' . $schedule['grace_period'] . ' minutes');
+
+// Determine status based on time
+$status = $currentTime <= $graceTime ? 'on-time' : 'late';
+```
+
+### Grace Period Examples
+
+| Start Time | Grace Period | On-Time Until | Late After |
+|------------|--------------|---------------|------------|
+| 9:00 AM | 5 minutes | 9:05 AM | 9:05 AM |
+| 9:00 AM | 15 minutes | 9:15 AM | 9:15 AM |
+| 9:00 AM | 30 minutes | 9:30 AM | 9:30 AM |
+| 2:00 PM | 10 minutes | 2:10 PM | 2:10 PM |
+
+<Warning>
+Grace periods are inclusive. A student scanning exactly at the grace period cutoff time (e.g., 9:15:00 for a 15-minute grace period starting at 9:00) will be marked as on-time.
+</Warning>
+
+## Day-of-Week Configuration
+
+Classes can meet on any combination of days. Each day can have its own start time and grace period, allowing flexibility for classes that meet at different times throughout the week.
+
+### Day Selection
+
+```php manage_schedule.php:132-140
+<select name="day" required>
+    <option value="1">Sunday</option>
+    <option value="2">Monday</option>
+    <option value="3">Tuesday</option>
+    <option value="4">Wednesday</option>
+    <option value="5">Thursday</option>
+    <option value="6">Friday</option>
+    <option value="7">Saturday</option>
+</select>
+```
+
+<Note>
+The system uses MySQL's `DAYOFWEEK()` function which returns 1 for Sunday, 2 for Monday, etc. This matches the values in the day selection dropdown.
+</Note>
+
+### Multiple Days Per Class
+
+You can create multiple schedule entries for the same class:
+
+**Example: MWF Class**
+- Monday: 9:00 AM, 15-minute grace period
+- Wednesday: 9:00 AM, 15-minute grace period  
+- Friday: 9:00 AM, 15-minute grace period
+
+**Example: TR Class with Different Times**
+- Tuesday: 10:00 AM, 10-minute grace period
+- Thursday: 2:00 PM, 10-minute grace period
+
+### Current Schedule Display
+
+```php manage_schedule.php:162-179
+$days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+foreach ($schedules as $schedule) {
+    echo "<tr>";
+    echo "<td>" . htmlspecialchars($days[$schedule['day_of_week'] - 1]) . "</td>";
+    echo "<td>" . htmlspecialchars(date('h:i A', strtotime($schedule['start_time']))) . "</td>";
+    echo "<td>" . htmlspecialchars($schedule['grace_period']) . " minutes</td>";
+    echo "<td>
+            <form method='post' style='display:inline;' onsubmit='return confirm(\"Are you sure you want to delete this schedule?\")' >
+                <input type='hidden' name='schedule_id' value='" . $schedule['id'] . "'>
+                <input type='hidden' name='class_id' value='" . $class_id . "'>
+                <input type='hidden' name='action' value='delete'>
+                <button type='submit' class='delete-btn'>Delete</button>
+            </form>
+          </td>";
+    echo "</tr>";
+}
+```
+
+## Schedule Validation
+
+The system validates schedules to ensure only authorized teachers can modify their class schedules.
+
+### Class Ownership Check
+
+```php manage_schedule.php:13-20
+// Verify the class belongs to this teacher
+$class_id = $_POST['class_id'] ?? 0;
+$stmt = $pdo->prepare("SELECT id FROM classes WHERE id = ? AND teacher_id = ?");
+$stmt->execute([$class_id, $teacher_id]);
+
+if ($stmt->rowCount() === 0) {
+    $error = "You don't have permission to modify this class";
+}
+```
+
+### Schedule Retrieval Security
+
+```php manage_schedule.php:66-80
+if ($class_id) {
+    // Verify the class belongs to this teacher
+    $stmt = $pdo->prepare("SELECT id, name FROM classes WHERE id = ? AND teacher_id = ?");
+    $stmt->execute([$class_id, $teacher_id]);
+    $class = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($class) {
+        $class_name = $class['name'];
+        // Get schedules only if class belongs to this teacher
+        $stmt = $pdo->prepare("SELECT * FROM class_schedules WHERE class_id = ?");
+        $stmt->execute([$class_id]);
+        $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $error = "You don't have permission to view this class schedule";
+    }
+}
+```
+
+<Warning>
+All schedule operations verify that the teacher owns the class before allowing modifications. This prevents teachers from modifying other teachers' schedules.
+</Warning>
+
+## Deleting Schedules
+
+Individual schedule entries can be deleted without affecting other schedules for the same class.
+
+### Schedule Deletion
+
+```php manage_schedule.php:22-36
+if (isset($_POST['action']) && $_POST['action'] === 'delete') {
+    $schedule_id = $_POST['schedule_id'];
+    
+    try {
+        $stmt = $pdo->prepare("
+            DELETE FROM cs 
+            USING class_schedules cs 
+            JOIN classes c ON cs.class_id = c.id 
+            WHERE cs.id = ? AND c.teacher_id = ?
+        ");
+        $stmt->execute([$schedule_id, $teacher_id]);
+        $message = "Schedule deleted successfully";
+    } catch(PDOException $e) {
+        $error = "Error deleting schedule: " . $e->getMessage();
+    }
+}
+```
+
+<Info>
+Deleting a schedule entry only removes that specific day/time combination. Other schedules for the class remain intact, and no attendance data is deleted.
+</Info>
+
+## Schedule and Attendance Integration
+
+When a QR code is scanned, the system automatically checks if there's a schedule for today to determine if attendance should be recorded.
+
+### Today's Schedule Check
+
+```php process_attendance.php:30-44
+// Get today's schedule
+$scheduleStmt = $pdo->prepare("
+    SELECT cs.* 
+    FROM class_schedules cs
+    JOIN classes c ON cs.class_id = c.id
+    WHERE c.teacher_id = ? 
+    AND cs.class_id = ?
+    AND cs.day_of_week = DAYOFWEEK(CURRENT_DATE())
+");
+$scheduleStmt->execute([$teacher_id, $student['class_id']]);
+$schedule = $scheduleStmt->fetch();
+
+if (!$schedule) {
+    echo "❌ No class scheduled for today with this teacher";
+    exit;
+}
+```
+
+### Schedule-Based Status
+
+The schedule's start time and grace period directly control the attendance status:
+
+<CardGroup cols={2}>
+  <Card title="Before Grace Period" icon="check" color="#22c55e">
+    Current Time ≤ Start Time + Grace Period = **On-Time**
+  </Card>
+  <Card title="After Grace Period" icon="clock" color="#f59e0b">
+    Current Time > Start Time + Grace Period = **Late**
+  </Card>
+</CardGroup>
+
+## Student Schedule View
+
+Students can view their class schedules from their dashboard, including when classes meet and the late cutoff times.
+
+### Student Schedule Display
+
+```php student_dashboard.php:250-259
+<?php foreach ($schedule as $day): ?>
+    <div class="schedule-item">
+        <div class="day-name"><?php echo htmlspecialchars($day['day_name']); ?></div>
+        <div class="class-info">
+            <div><strong>Class:</strong> <?php echo htmlspecialchars($class['class_name']); ?></div>
+            <div><strong>Start Time:</strong> <?php echo date('h:i A', strtotime($day['start_time'])); ?></div>
+            <div><strong>Late After:</strong> <?php echo date('h:i A', strtotime($day['start_time'] . ' + ' . $day['grace_period'] . ' minutes')); ?></div>
+        </div>
+    </div>
+<?php endforeach; ?>
+```
+
+<Info>
+Students see the "Late After" time, which is the start time plus grace period. This helps them understand the deadline for on-time attendance.
+</Info>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Consistent Times" icon="clock">
+    Use the same start times throughout the semester to avoid confusion
+  </Card>
+  <Card title="Reasonable Grace" icon="hourglass-half">
+    Set grace periods between 5-15 minutes to balance punctuality and flexibility
+  </Card>
+  <Card title="Multiple Sessions" icon="calendar-days">
+    Create separate schedules if your class meets at different times on different days
+  </Card>
+  <Card title="Early Setup" icon="calendar-check">
+    Configure schedules before the semester starts so students can view them
+  </Card>
+</CardGroup>
+
+## Common Schedule Patterns
+
+### Monday-Wednesday-Friday (MWF)
+Create three identical schedules:
+- Day: 2 (Monday), Start: 9:00 AM, Grace: 15 min
+- Day: 4 (Wednesday), Start: 9:00 AM, Grace: 15 min  
+- Day: 6 (Friday), Start: 9:00 AM, Grace: 15 min
+
+### Tuesday-Thursday (TR)
+Create two identical schedules:
+- Day: 3 (Tuesday), Start: 10:30 AM, Grace: 10 min
+- Day: 5 (Thursday), Start: 10:30 AM, Grace: 10 min
+
+### Daily Classes
+Create schedules for days 2-6 (Monday through Friday):
+- All with the same start time and grace period
+
+### Lab Sessions
+Different times for lecture vs lab:
+- Day: 2 (Monday), Start: 10:00 AM, Grace: 15 min (Lecture)
+- Day: 4 (Wednesday), Start: 2:00 PM, Grace: 10 min (Lab)

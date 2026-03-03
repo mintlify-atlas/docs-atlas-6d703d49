@@ -1,0 +1,116 @@
+---
+title: Welcome to QR Attendance System
+description: A modern, efficient attendance management system using QR code technology for educational institutions
+---
+
+# Welcome to QR Attendance System
+
+QR Attendance System is a complete web-based attendance management solution that leverages QR code technology to streamline the attendance marking process for students and teachers.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get your attendance system up and running in minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Step-by-step installation guide for your server
+  </Card>
+  <Card title="Student Guide" icon="user" href="/guides/student-guide">
+    Learn how students use the system
+  </Card>
+  <Card title="Teacher Guide" icon="chalkboard-user" href="/guides/teacher-guide">
+    Manage classes and track attendance
+  </Card>
+</CardGroup>
+
+## Key features
+
+The QR Attendance System provides a comprehensive set of features designed to make attendance tracking effortless:
+
+<CardGroup cols={2}>
+  <Card title="QR Code Attendance" icon="qrcode">
+    Students receive unique QR codes upon registration. Teachers scan these codes using their device camera to mark attendance instantly.
+  </Card>
+  <Card title="Smart Time Tracking" icon="clock">
+    Automatically calculates on-time vs late arrivals based on configurable grace periods for each class schedule.
+  </Card>
+  <Card title="Class Management" icon="users">
+    Teachers can create multiple classes, manage student rosters, and import/export student lists via Excel files.
+  </Card>
+  <Card title="Flexible Scheduling" icon="calendar">
+    Configure class schedules by day of week with custom start times and grace periods for late arrivals.
+  </Card>
+  <Card title="Real-time Dashboards" icon="chart-line">
+    Both students and teachers have dedicated dashboards showing attendance statistics, history, and class information.
+  </Card>
+  <Card title="Secure Authentication" icon="lock">
+    Built-in password hashing, session management, and password reset functionality ensure data security.
+  </Card>
+</CardGroup>
+
+## How it works
+
+<Steps>
+  <Step title="Student Registration">
+    Students register with their ID, name, email, and password. The system automatically generates a unique QR code for each student.
+  </Step>
+  
+  <Step title="Teacher Setup">
+    Teachers create an account with a teacher ID (format: T1234), then create classes and add students to their rosters.
+  </Step>
+  
+  <Step title="Schedule Configuration">
+    Teachers configure class schedules including day of week, start time, and grace period for late arrivals (default: 15 minutes).
+  </Step>
+  
+  <Step title="Mark Attendance">
+    During class, teachers open the QR scanner. Students display their QR code, and the system automatically records attendance with the correct status (on-time or late).
+  </Step>
+</Steps>
+
+## User roles
+
+The system supports three distinct user roles:
+
+### Students
+- View personal QR code for attendance
+- Check attendance history and statistics
+- View class schedule
+- Update profile information
+
+### Teachers
+- Create and manage classes
+- Add/remove students from classes
+- Configure class schedules
+- Scan QR codes to mark attendance
+- View and manually adjust attendance records
+- Export student rosters to Excel
+
+### Administrators
+- Default credentials: username `admin`, password `admin123`
+- Full system access for user management and maintenance
+
+<Note>
+The default admin account should be used for initial setup. Change the password immediately after first login for security.
+</Note>
+
+## Technology stack
+
+- **Backend**: PHP with PDO for secure database operations
+- **Database**: MySQL for data persistence
+- **QR Generation**: QRCode.js library (client-side)
+- **QR Scanning**: Instascan.js with camera integration
+- **Excel Import/Export**: PhpOffice PhpSpreadsheet
+- **Authentication**: PHP sessions with bcrypt password hashing
+
+## Get started
+
+Ready to set up your attendance system? Follow our [installation guide](/installation) to get started, or jump straight to the [quickstart](/quickstart) for a rapid deployment.
+
+<CardGroup cols={2}>
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Complete installation instructions
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get running in 10 minutes
+  </Card>
+</CardGroup>

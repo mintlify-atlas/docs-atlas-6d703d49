@@ -1,0 +1,406 @@
+---
+title: 'Attendance Processing'
+description: 'QR code scanning, attendance marking, and status calculation (on-time/late/absent)'
+icon: 'clipboard-check'
+---
+
+Process student attendance through QR code scanning with automatic status calculation based on class schedules.
+
+## QR Code Scanner
+
+**Page:** `scanner.php`
+
+**Authentication:** Teacher session required
+
+**Library:** Instascan.js for camera-based QR code scanning
+
+### Scanner Implementation
+
+```javascript
+let scanner = new Instascan.Scanner({ 
+    video: document.getElementById('preview') 
+});
+
+scanner.addListener('scan', function (content) {
+    // Send scanned data to process_attendance.php
+    fetch('process_attendance.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'qr_data=' + encodeURIComponent(content)
+    })
+    .then(response => response.text())
+    .then(data => {
+        document.getElementById('result').innerHTML = data;
+    });
+});
+```
+
+### Camera Selection
+
+```javascript
+Instascan.Camera.getCameras().then(function (cameras) {
+    if (cameras.length > 0) {
+        scanner.start(cameras[0]); // Use first available camera
+    } else {
+        console.error('No cameras found.');
+    }
+});
+```
+
+<Note>
+  The scanner uses the device's camera to read QR codes. Camera permissions must be granted by the user.
+</Note>
+
+---
+
+## Process Attendance
+
+**Endpoint:** `process_attendance.php`
+
+**Method:** POST
+
+**Authentication:** Teacher session required
+
+### Request Parameters
+
+<ParamField body="qr_data" type="string" required>
+  Student ID from scanned QR code
+</ParamField>
+
+### Processing Flow
+
+1. **Authentication Check:**
+   ```php
+   if (!isset($_SESSION['user_type']) || 
+       $_SESSION['user_type'] !== 'teacher' || 
+       !isset($_SESSION['teacher_id'])) {
+       echo "❌ Unauthorized access";
+       exit;
+   }
+   ```
+
+2. **Student Verification:**
+   ```sql
+   SELECT cs.class_id, s.* 
+   FROM students s
+   JOIN class_students cs ON s.student_id = cs.student_id 
+   JOIN classes c ON cs.class_id = c.id
+   WHERE s.student_id = ? AND c.teacher_id = ?
+   ```
+
+3. **Schedule Verification:**
+   ```sql
+   SELECT cs.* 
+   FROM class_schedules cs
+   JOIN classes c ON cs.class_id = c.id
+   WHERE c.teacher_id = ? 
+   AND cs.class_id = ?
+   AND cs.day_of_week = DAYOFWEEK(CURRENT_DATE())
+   ```
+
+4. **Duplicate Check:**
+   ```sql
+   SELECT * FROM attendance 
+   WHERE student_id = ? 
+   AND class_id = ? 
+   AND date = CURRENT_DATE()
+   ```
+
+5. **Status Calculation & Recording**
+
+---
+
+## Attendance Status Calculation
+
+**Algorithm:** Determines if student is on-time or late based on schedule
+
+### Time Comparison Logic
+
+```php
+// Get current time
+$currentTime = new DateTime();
+
+// Get class start time
+$startTime = new DateTime($schedule['start_time']);
+
+// Calculate grace time (start + grace period)
+$graceTime = clone $startTime;
+$graceTime->modify('+' . $schedule['grace_period'] . ' minutes');
+
+// Determine status
+$status = $currentTime <= $graceTime ? 'on-time' : 'late';
+```
+
+### Status Values
+
+<ResponseField name="on-time" type="string">
+  Student checked in at or before start_time + grace_period
+</ResponseField>
+
+<ResponseField name="late" type="string">
+  Student checked in after start_time + grace_period
+</ResponseField>
+
+<ResponseField name="absent" type="string">
+  Student did not check in (manually set by teacher or system)
+</ResponseField>
+
+### Example Calculation
+
+**Schedule:**
+- Start Time: 09:00 AM
+- Grace Period: 15 minutes
+- Late After: 09:15 AM
+
+**Check-in Times:**
+- 08:55 AM → **on-time**
+- 09:00 AM → **on-time**
+- 09:10 AM → **on-time**
+- 09:15 AM → **on-time**
+- 09:16 AM → **late**
+- 09:30 AM → **late**
+
+<Note>
+  Grace period is inclusive. Students checking in exactly at the grace time cutoff are marked on-time.
+</Note>
+
+---
+
+## Record Attendance
+
+**Database Operation:**
+
+```sql
+INSERT INTO attendance (student_id, class_id, date, time, status) 
+VALUES (?, ?, CURRENT_DATE(), CURRENT_TIME(), ?)
+```
+
+### Attendance Record Fields
+
+<ResponseField name="student_id" type="string">
+  Student identifier from QR code
+</ResponseField>
+
+<ResponseField name="class_id" type="integer">
+  ID of the class from schedule
+</ResponseField>
+
+<ResponseField name="date" type="date">
+  Current date (CURRENT_DATE())
+</ResponseField>
+
+<ResponseField name="time" type="time">
+  Current time (CURRENT_TIME())
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Calculated status: 'on-time' or 'late'
+</ResponseField>
+
+---
+
+## Response Messages
+
+### Success Responses
+
+**On-time Attendance:**
+```
+✅ On-time attendance marked for Student ID: 12345
+```
+
+**Late Attendance:**
+```
+⚠️ Late attendance marked for Student ID: 12345
+```
+
+### Error Responses
+
+**Unauthorized:**
+```
+❌ Unauthorized access
+```
+
+**Student Not Found:**
+```
+❌ Student not found in any of your classes
+```
+
+**No Schedule:**
+```
+❌ No class scheduled for today with this teacher
+```
+
+**Already Marked:**
+```
+⚠️ Attendance already marked for this class today
+```
+
+**Database Error:**
+```
+Error: [PDOException message]
+```
+
+---
+
+## Validation Rules
+
+### 1. Teacher Authorization
+
+<Warning>
+  Only logged-in teachers can process attendance. Student sessions are rejected.
+</Warning>
+
+```php
+if ($_SESSION['user_type'] !== 'teacher') {
+    echo "❌ Unauthorized access";
+    exit;
+}
+```
+
+### 2. Student-Teacher Relationship
+
+Student must be enrolled in one of the teacher's classes:
+
+```sql
+WHERE s.student_id = ? AND c.teacher_id = ?
+```
+
+### 3. Schedule Validation
+
+Class must be scheduled for the current day:
+
+```sql
+WHERE cs.day_of_week = DAYOFWEEK(CURRENT_DATE())
+```
+
+**Day Mapping:**
+- 1 = Sunday
+- 2 = Monday
+- 3 = Tuesday
+- 4 = Wednesday
+- 5 = Thursday
+- 6 = Friday
+- 7 = Saturday
+
+### 4. Duplicate Prevention
+
+Only one attendance record per student per class per day:
+
+```sql
+SELECT * FROM attendance 
+WHERE student_id = ? 
+AND class_id = ? 
+AND date = CURRENT_DATE()
+```
+
+---
+
+## Complete Processing Example
+
+### Scenario
+
+**Student:** ID 12345  
+**Teacher:** T1234  
+**Class:** Computer Science 101  
+**Schedule:** Monday 09:00 AM, Grace Period: 15 minutes  
+**Check-in Time:** 09:10 AM  
+
+### Processing Steps
+
+1. **QR Scan:** Student shows QR code containing "12345"
+2. **Teacher Auth:** Verified T1234 is logged in
+3. **Student Lookup:** Found student 12345 in CS101 (teacher T1234's class)
+4. **Schedule Check:** CS101 scheduled for Monday at 09:00 AM
+5. **Duplicate Check:** No attendance record for today
+6. **Status Calc:** 
+   - Current: 09:10 AM
+   - Grace: 09:15 AM
+   - Status: **on-time** ✅
+7. **Record:** Insert attendance record
+8. **Response:** "✅ On-time attendance marked for Student ID: 12345"
+
+### Database Record
+
+```sql
+INSERT INTO attendance 
+(student_id, class_id, date, time, status) 
+VALUES 
+('12345', 1, '2026-03-03', '09:10:00', 'on-time')
+```
+
+---
+
+## Manual Status Updates
+
+Teachers can manually update attendance status through the dashboard:
+
+**Endpoint:** `teacher_dashboard.php` (POST)
+
+<ParamField body="update_status" type="string" required>
+  Set to "1"
+</ParamField>
+
+<ParamField body="attendance_id" type="integer" required>
+  ID of attendance record to update
+</ParamField>
+
+<ParamField body="new_status" type="string" required>
+  New status: 'on-time', 'late', or 'absent'
+</ParamField>
+
+### Update Query
+
+```sql
+UPDATE attendance 
+SET status = ? 
+WHERE id = ?
+```
+
+**Verification:**
+```sql
+SELECT a.id 
+FROM attendance a
+JOIN classes c ON a.class_id = c.id
+WHERE a.id = ? AND c.teacher_id = ?
+```
+
+<Note>
+  Manual updates allow teachers to correct attendance status if a student was marked incorrectly.
+</Note>
+
+---
+
+## Error Handling
+
+All database operations are wrapped in try-catch blocks:
+
+```php
+try {
+    // Process attendance
+    $stmt = $pdo->prepare("...");
+    $stmt->execute([...]);
+} catch(PDOException $e) {
+    echo "Error: " . $e->getMessage();
+}
+```
+
+### Common Errors
+
+**Invalid Student ID:**
+- Student doesn't exist in database
+- Student not enrolled in any teacher's classes
+
+**Schedule Issues:**
+- No schedule set for class
+- Class not scheduled for current day
+
+**Database Errors:**
+- Connection failures
+- Constraint violations
+- Transaction rollbacks
+
+<Warning>
+  Always validate all inputs and check for existing records before inserting new attendance data.
+</Warning>

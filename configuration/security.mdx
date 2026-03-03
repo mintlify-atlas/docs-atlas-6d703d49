@@ -1,0 +1,503 @@
+---
+title: 'Security'
+description: 'Security features and best practices in the QR Attendance System'
+---
+
+## Overview
+
+The QR Attendance System implements multiple layers of security to protect user data and prevent common web vulnerabilities. This page documents the security mechanisms used throughout the application.
+
+## Password Security
+
+### Password Hashing
+
+All passwords are hashed using PHP's `password_hash()` function with the bcrypt algorithm (PASSWORD_DEFAULT).
+
+#### Registration
+
+When users register, passwords are hashed before storage:
+
+```php register.php:150
+$hashed_password = password_hash($password, PASSWORD_DEFAULT);
+```
+
+**Student Registration:**
+```php register.php:164
+$stmt = $pdo->prepare("INSERT INTO students (student_id, name, email, password, qr_code) VALUES (?, ?, ?, ?, ?)");
+$stmt->execute([$student_id, $name, $email, $hashed_password, $qr_data]);
+```
+
+**Teacher Registration:**
+```php register.php:200
+$stmt = $pdo->prepare("INSERT INTO teachers (teacher_id, name, email, password) VALUES (?, ?, ?, ?)");
+$stmt->execute([$teacher_id, $name, $email, $hashed_password]);
+```
+
+<Note>
+`PASSWORD_DEFAULT` uses bcrypt, which automatically handles salting and uses an adaptive cost factor to remain secure as hardware improves.
+</Note>
+
+#### Password Verification
+
+During login, passwords are verified using `password_verify()`:
+
+```php login_process.php:11-20
+$stmt = $pdo->prepare("SELECT * FROM students WHERE student_id = ?");
+$stmt->execute([$student_id]);
+$student = $stmt->fetch();
+
+if ($student && password_verify($password, $student['password'])) {
+    $_SESSION['user_id'] = $student['id'];
+    $_SESSION['user_type'] = 'student';
+    $_SESSION['student_id'] = $student['student_id'];
+    header("Location: student_dashboard.php");
+}
+```
+
+**Security Benefits:**
+- Plaintext passwords never stored in database
+- Timing-safe comparison prevents timing attacks
+- Automatic salt generation
+- Resistant to rainbow table attacks
+
+### Password Strength Requirements
+
+The system enforces minimum password requirements:
+
+```php register.php:87-88
+<input type="password" name="password" required placeholder="Choose a strong password" minlength="8">
+<small style="color: #666;">Minimum 8 characters</small>
+```
+
+Server-side validation in password reset:
+
+```php update_password.php:18-23
+if (strlen($newPassword) < 8) {
+    $_SESSION['error'] = "Password must be at least 8 characters long.";
+    header("Location: password_reset_form.php");
+    exit();
+}
+```
+
+<Warning>
+While 8 characters is the minimum, encourage users to create longer passwords with mixed character types for better security.
+</Warning>
+
+### Password Change Functionality
+
+Users can change passwords from their dashboard with current password verification:
+
+```php student_dashboard.php:12-35
+if (isset($_POST['change_password'])) {
+    $current_password = $_POST['current_password'];
+    $new_password = $_POST['new_password'];
+    $confirm_password = $_POST['confirm_password'];
+    
+    // Verify passwords match
+    if ($new_password !== $confirm_password) {
+        $password_error = "New passwords do not match";
+    } else {
+        // Verify current password
+        $stmt = $pdo->prepare("SELECT password FROM students WHERE id = ?");
+        $stmt->execute([$student_id]);
+        $user = $stmt->fetch();
+        
+        if (password_verify($current_password, $user['password'])) {
+            // Update password
+            $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare("UPDATE students SET password = ? WHERE id = ?");
+            $stmt->execute([$hashed_password, $student_id]);
+            $password_success = "Password changed successfully!";
+        } else {
+            $password_error = "Current password is incorrect";
+        }
+    }
+}
+```
+
+## SQL Injection Prevention
+
+The system uses PDO prepared statements for all database queries, preventing SQL injection attacks.
+
+### Prepared Statements
+
+All queries use parameter binding instead of string concatenation:
+
+**Vulnerable Code (NOT used):**
+```php
+// NEVER do this!
+$query = "SELECT * FROM students WHERE student_id = '$student_id'";
+$result = $pdo->query($query);
+```
+
+**Secure Code (used throughout):**
+```php login_process.php:11-12
+$stmt = $pdo->prepare("SELECT * FROM students WHERE student_id = ?");
+$stmt->execute([$student_id]);
+```
+
+### Examples Across the Application
+
+**User Authentication:**
+```php login_process.php:31-32
+$stmt = $pdo->prepare("SELECT * FROM teachers WHERE teacher_id = ?");
+$stmt->execute([$teacher_id]);
+```
+
+**Password Reset:**
+```php reset_password.php:10-11
+$stmt = $pdo->prepare("SELECT * FROM students WHERE student_id = ? AND email = ?");
+$stmt->execute([$userID, $email]);
+```
+
+**Token Validation:**
+```php update_password.php:30-31
+$stmt = $pdo->prepare("SELECT * FROM $tableName WHERE $idField = ? AND reset_token = ? AND reset_token_expiry > NOW()");
+$stmt->execute([$userID, $token]);
+```
+
+<Note>
+Prepared statements separate SQL code from data, ensuring user input is treated as data only and never executed as SQL commands.
+</Note>
+
+### PDO Configuration
+
+PDO is configured to use exceptions for error handling:
+
+```php config.php:9-10
+$pdo = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+```
+
+**Benefits:**
+- Errors throw exceptions instead of failing silently
+- Easier debugging during development
+- Consistent error handling
+- Failed queries don't return partial results
+
+## Session Management
+
+### Session Initialization
+
+Sessions are started at the application entry point:
+
+```php config.php:2
+session_start();
+```
+
+### Authentication State
+
+User authentication status is maintained in session variables:
+
+**Student Login:**
+```php login_process.php:16-18
+$_SESSION['user_id'] = $student['id'];
+$_SESSION['user_type'] = 'student';
+$_SESSION['student_id'] = $student['student_id'];
+```
+
+**Teacher Login:**
+```php login_process.php:36-39
+$_SESSION['user_id'] = $teacher['id'];
+$_SESSION['user_type'] = 'teacher';
+$_SESSION['teacher_id'] = $teacher['teacher_id'];
+$_SESSION['teacher_name'] = $teacher['name'];
+```
+
+### Access Control
+
+Protected pages verify user authentication and authorization:
+
+```php student_dashboard.php:4-7
+if (!isset($_SESSION['user_type']) || $_SESSION['user_type'] !== 'student') {
+    header("Location: index.php");
+    exit();
+}
+```
+
+**Security Features:**
+- Checks if user is logged in (`isset($_SESSION['user_type'])`)
+- Validates user has correct role (`$_SESSION['user_type'] !== 'student'`)
+- Redirects unauthorized users to login page
+- Uses `exit()` to prevent further code execution
+
+### Session Messages
+
+Error and success messages are stored in sessions to persist across redirects:
+
+```php login_process.php:22-23
+$_SESSION['error'] = "Invalid student ID or password. Please check your credentials and try again.";
+header("Location: index.php");
+```
+
+Messages are displayed once then cleared:
+
+```php index.php:27-35
+if (isset($_SESSION['error'])) {
+    echo '<div class="error">' . $_SESSION['error'] . '</div>';
+    unset($_SESSION['error']);
+}
+if (isset($_SESSION['success'])) {
+    echo '<div class="success">' . $_SESSION['success'] . '</div>';
+    unset($_SESSION['success']);
+}
+```
+
+<Note>
+Using `unset()` ensures messages are only shown once, preventing confusion if users refresh the page.
+</Note>
+
+## Cross-Site Scripting (XSS) Prevention
+
+### Output Escaping
+
+User-controlled data is escaped before display:
+
+```php password_reset_form.php:46-48
+<input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
+<input type="hidden" name="userID" value="<?php echo htmlspecialchars($userID); ?>">
+<input type="hidden" name="userType" value="<?php echo htmlspecialchars($userType); ?>">
+```
+
+**`htmlspecialchars()` converts:**
+- `<` to `&lt;`
+- `>` to `&gt;`
+- `"` to `&quot;`
+- `'` to `&#039;`
+- `&` to `&amp;`
+
+This prevents malicious scripts from executing in the browser.
+
+### Input Validation
+
+User input is validated before processing:
+
+**ID Format Validation:**
+```php login_process.php:7
+if (ctype_digit($userID)) {
+    // Student login (numeric ID)
+```
+
+```php login_process.php:27
+else if (strpos($userID, "T") === 0) {
+    // Teacher login (starts with T)
+```
+
+**Teacher ID Pattern Validation:**
+```php register.php:190-191
+if (!preg_match('/^T\d{4}$/', $teacher_id)) {
+    echo '<div class="error-message">Teacher ID must be in format T followed by 4 digits (e.g., T1234)</div>';
+```
+
+**Email Uniqueness Check:**
+```php student_dashboard.php:43-46
+$stmt = $pdo->prepare("SELECT * FROM students WHERE email = ? AND id != ?");
+$stmt->execute([$new_email, $student_id]);
+if ($stmt->rowCount() > 0) {
+    $email_error = "Email already in use by another account";
+```
+
+## Password Reset Security
+
+### Token Generation
+
+Reset tokens use cryptographically secure random bytes:
+
+```php reset_password.php:32
+$token = bin2hex(random_bytes(32));
+```
+
+**Token Properties:**
+- 64-character hexadecimal string
+- 256 bits of entropy
+- Generated using `random_bytes()` (CSPRNG)
+- Practically impossible to guess or brute force
+
+### Token Expiration
+
+Tokens are valid for only 1 hour:
+
+```php reset_password.php:33
+$expiry = date('Y-m-d H:i:s', strtotime('+1 hour'));
+```
+
+Expired tokens are rejected:
+
+```php update_password.php:30
+$stmt = $pdo->prepare("SELECT * FROM $tableName WHERE $idField = ? AND reset_token = ? AND reset_token_expiry > NOW()");
+```
+
+### Single-Use Tokens
+
+Tokens are cleared immediately after use:
+
+```php update_password.php:39
+$stmt = $pdo->prepare("UPDATE $tableName SET password = ?, reset_token = NULL, reset_token_expiry = NULL WHERE $idField = ?");
+```
+
+This prevents token reuse, even if intercepted.
+
+## User Input Sanitization
+
+### Trim Whitespace
+
+User input is trimmed to prevent whitespace-based attacks:
+
+```php reset_password.php:5-6
+$userID = trim($_POST["userID"]);
+$email = trim($_POST["email"]);
+```
+
+```php login_process.php:5
+$userID = trim($_POST["userID"]);
+```
+
+### Password Confirmation
+
+Passwords must be entered twice to prevent typos:
+
+```php register.php:142-146
+if ($password !== $confirm_password) {
+    $error = true;
+    $error_message = 'Passwords do not match';
+}
+```
+
+```php update_password.php:12-15
+if ($newPassword !== $confirmPassword) {
+    $_SESSION['error'] = "Passwords do not match.";
+    header("Location: password_reset_form.php");
+    exit();
+}
+```
+
+## Cache Control
+
+Cache headers prevent sensitive pages from being cached:
+
+```php index.php:7-11
+<meta http-equiv="cache-control" content="no-cache, must-revalidate, post-check=0, pre-check=0" />
+<meta http-equiv="cache-control" content="max-age=0" />
+<meta http-equiv="expires" content="0" />
+<meta http-equiv="expires" content="Tue, 01 Jan 1980 1:00:00 GMT" />
+<meta http-equiv="pragma" content="no-cache" />
+```
+
+**Benefits:**
+- Prevents browsers from caching login pages
+- Protects against session fixation on shared computers
+- Ensures users see up-to-date content
+- Prevents back-button access after logout
+
+## Security Best Practices
+
+### Implemented
+
+- **Password hashing** with bcrypt
+- **Prepared statements** for all database queries
+- **Session-based authentication** with role checking
+- **CSRF protection** via POST-only forms
+- **XSS prevention** with output escaping
+- **Secure token generation** for password resets
+- **Token expiration** (1 hour)
+- **Input validation** for user IDs and emails
+- **Single-use tokens** for password reset
+
+### Recommended Additions
+
+<Steps>
+  <Step title="Add HTTPS">
+    Force HTTPS for all connections to encrypt data in transit:
+    
+    ```php
+    if (!isset($_SERVER['HTTPS']) || $_SERVER['HTTPS'] !== 'on') {
+        header('Location: https://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']);
+        exit();
+    }
+    ```
+  </Step>
+  
+  <Step title="Implement CSRF tokens">
+    Add CSRF tokens to forms to prevent cross-site request forgery:
+    
+    ```php
+    // Generate token
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    
+    // In form
+    <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+    
+    // Validate
+    if ($_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        die('CSRF token validation failed');
+    }
+    ```
+  </Step>
+  
+  <Step title="Add rate limiting">
+    Prevent brute force attacks with login attempt limiting:
+    
+    ```php
+    // Track failed attempts
+    if (!isset($_SESSION['login_attempts'])) {
+        $_SESSION['login_attempts'] = 0;
+        $_SESSION['last_attempt'] = time();
+    }
+    
+    // Check if locked out
+    if ($_SESSION['login_attempts'] >= 5 && time() - $_SESSION['last_attempt'] < 900) {
+        die('Too many login attempts. Try again in 15 minutes.');
+    }
+    ```
+  </Step>
+  
+  <Step title="Enable secure session settings">
+    Configure PHP sessions for maximum security:
+    
+    ```php
+    ini_set('session.cookie_httponly', 1);
+    ini_set('session.cookie_secure', 1);
+    ini_set('session.cookie_samesite', 'Strict');
+    session_start();
+    ```
+  </Step>
+  
+  <Step title="Add password complexity requirements">
+    Enforce stronger passwords:
+    
+    ```php
+    if (!preg_match('/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/', $password)) {
+        die('Password must contain uppercase, lowercase, and numbers');
+    }
+    ```
+  </Step>
+  
+  <Step title="Implement audit logging">
+    Log security-relevant events:
+    
+    ```php
+    error_log("Login attempt for user $userID from {$_SERVER['REMOTE_ADDR']}");
+    ```
+  </Step>
+</Steps>
+
+## Security Checklist
+
+Before deploying to production:
+
+- [ ] Change default admin password from `admin123`
+- [ ] Update database credentials in `config.php`
+- [ ] Enable HTTPS with valid SSL certificate
+- [ ] Set restrictive file permissions (644 for files, 755 for directories)
+- [ ] Disable PHP error display in production (`display_errors = Off`)
+- [ ] Enable error logging (`log_errors = On`)
+- [ ] Keep PHP and MySQL up to date
+- [ ] Implement regular database backups
+- [ ] Add rate limiting to login and password reset
+- [ ] Configure secure session settings
+- [ ] Review and test all user input handling
+- [ ] Implement CSRF protection for all forms
+
+<Warning>
+Never deploy with default credentials or debug settings enabled in production!
+</Warning>

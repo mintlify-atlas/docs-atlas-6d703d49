@@ -1,0 +1,419 @@
+---
+title: Teacher Guide
+description: Complete guide for teachers managing classes and attendance
+---
+
+# Teacher guide
+
+This comprehensive guide covers all teacher features in the QR Attendance System.
+
+## Getting started
+
+### Registration
+
+<Steps>
+  <Step title="Navigate to registration">
+    From the login page, click **Register**, then select the **Teacher Registration** tab.
+  </Step>
+
+  <Step title="Fill in your details">
+    - **Teacher ID**: Must follow format `T` followed by 4 digits (e.g., `T1234`)
+    - **Full Name**: Your complete name
+    - **Email**: Valid email address
+    - **Password**: Minimum 8 characters
+    - **Confirm Password**: Must match password
+  </Step>
+
+  <Step title="Complete registration">
+    Click **Create Teacher Account**. You'll see a success message and can log in immediately.
+  </Step>
+</Steps>
+
+<Note>
+Teacher ID must match the pattern `T\d{4}` (T followed by exactly 4 digits). Examples: T1001, T5432, T0001.
+</Note>
+
+## Teacher dashboard
+
+Your dashboard is the central hub for managing classes and tracking attendance.
+
+### Dashboard sections
+
+**Header**
+- Welcome message with your name
+- Teacher ID and email display
+- **Logout** button
+- Profile actions: **Change Password** and **Update Email**
+
+**Navigation Links**
+- **Open Scanner**: Launch QR code scanner for marking attendance
+- **Manage Classes**: Create classes and manage student rosters
+- **Manage Schedule**: Configure class times and grace periods
+
+**Class Selection**
+- Dropdown to select which class to view
+- Displays "Create a class first" message if you have no classes
+
+**Statistics (when class selected)**
+- Total Students: Number enrolled in selected class
+- Present Today: Students with attendance marked today
+- Attendance Rate: Percentage of students present today
+
+**Today's Attendance Table**
+- Shows all students in the class (including absent students via LEFT JOIN)
+- Displays student ID, name, time marked, and status
+- Status dropdown for manual adjustments (on-time, late, absent)
+- Changes save automatically when status is changed
+
+## Managing classes
+
+### Creating a class
+
+<Steps>
+  <Step title="Navigate to class management">
+    Click **Manage Classes** from your dashboard.
+  </Step>
+
+  <Step title="Enter class name">
+    In the "Create New Class" section, enter a descriptive name (e.g., "Computer Science 101").
+  </Step>
+
+  <Step title="Create">
+    Click **Create Class**. The new class appears in your class list immediately.
+  </Step>
+</Steps>
+
+### Adding students to a class
+
+You can add students individually or import them in bulk from Excel.
+
+#### Individual student addition
+
+<Steps>
+  <Step title="Locate your class">
+    Find the class card in your class list.
+  </Step>
+
+  <Step title="Enter student ID">
+    Type the student's ID in the "Enter student ID" field.
+  </Step>
+
+  <Step title="Add student">
+    Click **Add Student**. The student appears in the enrollment table below.
+  </Step>
+</Steps>
+
+<Warning>
+Students can only be enrolled in ONE class per teacher. If a student is already in one of your classes, you'll see an error message indicating which class they're in.
+</Warning>
+
+#### Excel import
+
+<Steps>
+  <Step title="Prepare your Excel file">
+    Create a spreadsheet with these columns:
+    - Column A: Student ID
+    - Column B: Full Name
+    - Column C: Email
+    
+    First row should be headers if you check "File has header row".
+  </Step>
+
+  <Step title="Click Import Students">
+    Expand the "Import Students from Excel" section.
+  </Step>
+
+  <Step title="Select file">
+    Choose your `.xlsx`, `.xls`, or `.csv` file.
+  </Step>
+
+  <Step title="Configure options">
+    Check "File has header row" if your first row contains column headers.
+  </Step>
+
+  <Step title="Import">
+    Click **Import Students**. The system will:
+    - Create new student accounts for IDs not in the database (default password: `changeme123`)
+    - Skip students already enrolled in your classes
+    - Add students to the selected class
+    - Display a summary of imported and skipped students
+  </Step>
+</Steps>
+
+<Info>
+New students created via import receive the default password `changeme123`. Advise them to change it immediately upon first login.
+</Info>
+
+### Exporting class roster
+
+<Steps>
+  <Step title="Locate your class">
+    Find the class card in **Manage Classes**.
+  </Step>
+
+  <Step title="Click Export to Excel">
+    The export button is in the controls section.
+  </Step>
+
+  <Step title="Download file">
+    An Excel file named `[ClassName]_roster.xlsx` downloads automatically with student ID, name, and email.
+  </Step>
+</Steps>
+
+### Removing students
+
+<Steps>
+  <Step title="Find the student">
+    In the class card, locate the student in the enrollment table.
+  </Step>
+
+  <Step title="Click Remove">
+    Click the **Remove** button next to their name.
+  </Step>
+
+  <Step title="Confirm">
+    Confirm the removal in the popup dialog.
+  </Step>
+</Steps>
+
+### Deleting a class
+
+<Warning>
+Deleting a class also removes all student enrollments, schedules, and attendance records for that class. This action cannot be undone.
+</Warning>
+
+<Steps>
+  <Step title="Locate the class">
+    Find the class card you want to delete.
+  </Step>
+
+  <Step title="Click Delete Class">
+    The button is in the class header.
+  </Step>
+
+  <Step title="Confirm">
+    Confirm the deletion in the popup dialog.
+  </Step>
+</Steps>
+
+## Scheduling classes
+
+### Setting class schedule
+
+<Steps>
+  <Step title="Navigate to schedule management">
+    Click **Manage Schedule** from your dashboard.
+  </Step>
+
+  <Step title="Select your class">
+    Choose the class from the dropdown menu.
+  </Step>
+
+  <Step title="Add schedule">
+    - **Day of Week**: Select from Sunday to Saturday
+    - **Start Time**: Set class start time (e.g., 09:00)
+    - **Grace Period**: Set minutes after start time before students are marked late (default: 15)
+  </Step>
+
+  <Step title="Update Schedule">
+    Click **Update Schedule**. The schedule appears in the current schedule table.
+  </Step>
+</Steps>
+
+<Tip>
+You can add multiple schedules for classes that meet on different days. For example, add Monday, Wednesday, and Friday for a MWF class.
+</Tip>
+
+### Modifying schedules
+
+To change a schedule:
+1. Select the same day in the form
+2. Enter new start time or grace period
+3. Click **Update Schedule**
+
+The system uses `ON DUPLICATE KEY UPDATE` to modify existing schedules for the same day.
+
+### Deleting schedules
+
+<Steps>
+  <Step title="Locate the schedule">
+    Find the schedule entry in the "Current Schedule" table.
+  </Step>
+
+  <Step title="Click Delete">
+    Click the **Delete** button for that schedule.
+  </Step>
+
+  <Step title="Confirm">
+    Confirm the deletion in the popup dialog.
+  </Step>
+</Steps>
+
+## Marking attendance
+
+### Using the QR scanner
+
+<Steps>
+  <Step title="Open scanner">
+    Click **Open Scanner** from your dashboard.
+  </Step>
+
+  <Step title="Allow camera access">
+    Grant camera permissions when your browser requests them. HTTPS is required for camera access.
+  </Step>
+
+  <Step title="Scan student QR codes">
+    Point your camera at each student's QR code. The system automatically:
+    - Verifies student is in your class
+    - Checks if today matches a scheduled class day
+    - Determines on-time vs late status
+    - Records the attendance
+    - Displays a confirmation message
+  </Step>
+</Steps>
+
+<Info>
+The scanner uses Instascan.js library and automatically selects the first available camera on your device.
+</Info>
+
+### Attendance processing logic
+
+When a QR code is scanned:
+
+1. **Student verification**: Checks if student is enrolled in any of your classes
+2. **Schedule verification**: Confirms today matches a scheduled class day using `DAYOFWEEK(CURRENT_DATE())`
+3. **Duplicate check**: Prevents marking attendance twice on the same day
+4. **Status calculation**:
+   - Current time ≤ (start time + grace period) → **on-time**
+   - Current time > (start time + grace period) → **late**
+5. **Record creation**: Inserts attendance record with calculated status
+
+### Manual attendance adjustment
+
+From your dashboard:
+
+<Steps>
+  <Step title="Select class">
+    Choose the class from the dropdown.
+  </Step>
+
+  <Step title="Locate student">
+    Find the student in the "Today's Attendance" table.
+  </Step>
+
+  <Step title="Change status">
+    Click the status dropdown and select:
+    - **On-time**
+    - **Late**  
+    - **Absent**
+    
+    Changes save automatically via form submission.
+  </Step>
+</Steps>
+
+<Note>
+Only students with existing attendance records show the status dropdown. Students marked absent have no record and display a static "Absent" badge.
+</Note>
+
+## Managing your profile
+
+### Changing password
+
+<Steps>
+  <Step title="Open password modal">
+    Click **Change Password** in the profile actions section.
+  </Step>
+
+  <Step title="Enter details">
+    - Current Password
+    - New Password
+    - Confirm New Password
+  </Step>
+
+  <Step title="Update">
+    Click **Update Password**. You'll be redirected and see a success message.
+  </Step>
+</Steps>
+
+### Updating email
+
+<Steps>
+  <Step title="Open email modal">
+    Click **Update Email** in the profile actions section.
+  </Step>
+
+  <Step title="Enter new email">
+    Provide your new email address.
+  </Step>
+
+  <Step title="Confirm with password">
+    Enter your current password to verify the change.
+  </Step>
+
+  <Step title="Update">
+    Click **Update Email**. You'll see a success message if updated.
+  </Step>
+</Steps>
+
+## Best practices
+
+<Accordion title="Set schedules before first class">
+  Configure your class schedule before the first session so the system can correctly calculate on-time vs late status.
+</Accordion>
+
+<Accordion title="Use reasonable grace periods">
+  The default 15-minute grace period works well for most classes. Adjust based on your institution's policies.
+</Accordion>
+
+<Accordion title="Import large rosters via Excel">
+  For classes with 20+ students, use Excel import instead of adding students individually.
+</Accordion>
+
+<Accordion title="Review daily attendance">
+  Check the attendance table at the end of each class to mark absent students or correct any errors.
+</Accordion>
+
+<Accordion title="Export rosters regularly">
+  Keep backup copies of your class rosters by exporting to Excel periodically.
+</Accordion>
+
+## Troubleshooting
+
+### Scanner won't open
+- Ensure you're using HTTPS (required for camera access)
+- Check browser permissions - camera must be allowed
+- Try a different browser (Chrome and Firefox work best)
+- Verify another app isn't using the camera
+
+### Student not found when scanning
+- Verify student is enrolled in your class via **Manage Classes**
+- Check that today matches a scheduled class day
+- Ensure student is using the correct QR code
+
+### Can't add student to class
+- Student must be registered first
+- Check if student is already in another of your classes
+- Verify student ID is correct (case-sensitive)
+
+### Excel import failures
+- Ensure PhpSpreadsheet is installed via Composer
+- Check file format (.xlsx, .xls, or .csv only)
+- Verify column order: Student ID, Name, Email
+- Check for duplicate student IDs in your file
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Class Management" icon="users" href="/features/class-management">
+    Deep dive into class management features
+  </Card>
+  <Card title="Schedule Management" icon="calendar" href="/features/schedule-management">
+    Learn more about scheduling options
+  </Card>
+  <Card title="Attendance Tracking" icon="chart-line" href="/features/attendance-tracking">
+    Understand attendance tracking in detail
+  </Card>
+  <Card title="QR Attendance" icon="qrcode" href="/features/qr-attendance">
+    How QR code attendance works
+  </Card>
+</CardGroup>

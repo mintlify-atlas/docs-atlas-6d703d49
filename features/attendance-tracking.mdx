@@ -1,0 +1,429 @@
+---
+title: 'Attendance Tracking'
+description: 'Real-time attendance monitoring, status updates, statistics, and historical records'
+---
+
+## Overview
+
+The Attendance Tracking system provides comprehensive monitoring and management of student attendance. Teachers can view real-time attendance for current classes, update statuses manually, view statistics, and access historical records. Students can monitor their own attendance history and check-in records.
+
+## Real-Time Tracking
+
+The teacher dashboard displays live attendance data for today's classes, automatically updating as students scan their QR codes.
+
+### Today's Attendance Display
+
+```php teacher_dashboard.php:174-215
+$stmt = $pdo->prepare("
+    SELECT 
+        cs.student_id,
+        s.name,
+        a.id as attendance_id,
+        a.time,
+        COALESCE(a.status, 'absent') as status
+    FROM class_students cs
+    JOIN students s ON cs.student_id = s.student_id
+    LEFT JOIN attendance a ON cs.student_id = a.student_id 
+        AND a.class_id = cs.class_id 
+        AND a.date = CURRENT_DATE()
+    WHERE cs.class_id = ?
+    ORDER BY s.name
+");
+$stmt->execute([$selected_class]);
+
+while ($row = $stmt->fetch()) {
+    echo "<tr>";
+    echo "<td>" . htmlspecialchars($row['student_id']) . "</td>";
+    echo "<td>" . htmlspecialchars($row['name']) . "</td>";
+    echo "<td>" . ($row['time'] ? htmlspecialchars(date('h:i A', strtotime($row['time']))) : 'N/A') . "</td>";
+    echo "<td>";
+    if ($row['attendance_id']) {
+        // Show editable status dropdown
+    } else {
+        echo "<span class='status-badge absent'>Absent</span>";
+    }
+    echo "</td>";
+    echo "</tr>";
+}
+```
+
+### Real-Time Features
+
+<CardGroup cols={2}>
+  <Card title="Instant Updates" icon="bolt">
+    Attendance appears immediately after QR code scan
+  </Card>
+  <Card title="All Students Listed" icon="users">
+    Shows entire class roster, not just present students
+  </Card>
+  <Card title="Default Absent" icon="user-slash">
+    Students without scans shown as absent
+  </Card>
+  <Card title="Timestamp Display" icon="clock">
+    Shows exact time of attendance check-in
+  </Card>
+</CardGroup>
+
+<Info>
+The system uses a `LEFT JOIN` to ensure all enrolled students appear in the attendance list, even those who haven't checked in yet. Students without attendance records automatically show as "Absent".
+</Info>
+
+## Status Updates
+
+Teachers can manually update attendance statuses directly from the dashboard. This is useful for correcting errors or manually marking students present/late/absent.
+
+### Manual Status Update
+
+```php teacher_dashboard.php:14-38
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
+    $attendance_id = $_POST['attendance_id'];
+    $new_status = $_POST['new_status'];
+    
+    // Verify teacher has permission to update this attendance record
+    $verify_stmt = $pdo->prepare("
+        SELECT a.id 
+        FROM attendance a
+        JOIN classes c ON a.class_id = c.id
+        WHERE a.id = ? AND c.teacher_id = ?
+    ");
+    $verify_stmt->execute([$attendance_id, $teacher_id]);
+    
+    if ($verify_stmt->rowCount() > 0) {
+        $update_stmt = $pdo->prepare("
+            UPDATE attendance 
+            SET status = ? 
+            WHERE id = ?
+        ");
+        $update_stmt->execute([$new_status, $attendance_id]);
+        $_SESSION['success'] = "Attendance status updated successfully";
+    } else {
+        $_SESSION['error'] = "You don't have permission to modify this attendance record";
+    }
+}
+```
+
+### Editable Status Dropdown
+
+```php teacher_dashboard.php:197-207
+if ($row['attendance_id']) {
+    echo "<form method='POST' style='display: inline;'>";
+    echo "<input type='hidden' name='attendance_id' value='" . $row['attendance_id'] . "'>";
+    echo "<select name='new_status' onchange='this.form.submit()' class='status-select'>";
+    foreach (['on-time', 'late', 'absent'] as $status) {
+        $selected = $row['status'] === $status ? 'selected' : '';
+        echo "<option value='$status' $selected>" . ucfirst($status) . "</option>";
+    }
+    echo "</select>";
+    echo "<input type='hidden' name='update_status' value='1'>";
+    echo "</form>";
+}
+```
+
+### Available Status Options
+
+| Status | Description | Use Case |
+|--------|-------------|----------|
+| **On-Time** | Student arrived within grace period | Scanned before cutoff or manually corrected |
+| **Late** | Student arrived after grace period | Scanned after cutoff or arrived late |
+| **Absent** | Student did not attend | No scan or confirmed absence |
+
+<Warning>
+Status updates require ownership verification. Teachers can only modify attendance records for classes they own, preventing unauthorized changes.
+</Warning>
+
+## Attendance Statistics
+
+The dashboard provides quick statistics for the selected class, giving teachers an at-a-glance view of today's attendance.
+
+### Statistics Calculation
+
+```php teacher_dashboard.php:131-146
+// Get quick stats
+$total_students = $pdo->prepare("SELECT COUNT(*) FROM class_students WHERE class_id = ?");
+$total_students->execute([$selected_class]);
+$student_count = $total_students->fetchColumn();
+
+// Check attendance.class_id
+$present_today = $pdo->prepare("
+    SELECT COUNT(DISTINCT a.student_id) 
+    FROM attendance a 
+    WHERE a.class_id = ? AND a.date = CURRENT_DATE()
+");
+$present_today->execute([$selected_class]);
+$attendance_count = $present_today->fetchColumn();
+
+$attendance_rate = $student_count > 0 ? round(($attendance_count / $student_count) * 100) : 0;
+```
+
+### Statistics Dashboard
+
+```php teacher_dashboard.php:148-161
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value"><?= $student_count ?></div>
+        <div class="stat-label">Total Students</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value"><?= $attendance_count ?></div>
+        <div class="stat-label">Present Today</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value"><?= $attendance_rate ?>%</div>
+        <div class="stat-label">Attendance Rate</div>
+    </div>
+</div>
+```
+
+<CardGroup cols={3}>
+  <Card title="Total Students" icon="users">
+    Count of all enrolled students in the class
+  </Card>
+  <Card title="Present Today" icon="user-check">
+    Students who have checked in today (on-time or late)
+  </Card>
+  <Card title="Attendance Rate" icon="percent">
+    Percentage of students present (rounded)
+  </Card>
+</CardGroup>
+
+<Info>
+The attendance rate counts both on-time and late students as "present". Only students marked as absent are excluded from the count.
+</Info>
+
+## Attendance History
+
+Students can view their complete attendance history from their dashboard, showing dates, times, teachers, and statuses for all recorded check-ins.
+
+### Student History Query
+
+```php student_dashboard.php:159-168
+$stmt = $pdo->prepare("
+    SELECT a.*, c.name as class_name, t.name as teacher_name
+    FROM attendance a
+    LEFT JOIN classes c ON a.class_id = c.id
+    LEFT JOIN teachers t ON c.teacher_id = t.teacher_id
+    WHERE a.student_id = ? 
+    ORDER BY a.date DESC, a.time DESC 
+    LIMIT 10
+");
+$stmt->execute([$student['student_id']]);
+```
+
+### History Display
+
+```php student_dashboard.php:171-195
+while ($row = $stmt->fetch()) {
+    $has_records = true;
+    echo "<tr>";
+    echo "<td>" . date('F d, Y', strtotime($row['date'])) . "</td>";
+    echo "<td>" . date('h:i A', strtotime($row['time'])) . "</td>";
+    echo "<td>" . htmlspecialchars($row['teacher_name']) . "</td>";
+    
+    $status = $row['status'] ?: 'on-time';
+    $status_class = '';
+    $status_text = 'Unknown';
+    
+    if ($status == 'on-time') {
+        $status_class = 'on-time';
+        $status_text = 'On Time';
+    } elseif ($status == 'late') {
+        $status_class = 'late';
+        $status_text = 'Late';
+    } elseif ($status == 'absent') {
+        $status_class = 'absent';
+        $status_text = 'Absent';
+    }
+    
+    echo "<td><span class='status-badge $status_class'>$status_text</span></td>";
+    echo "</tr>";
+}
+```
+
+### History Features
+
+<CardGroup cols={2}>
+  <Card title="Recent First" icon="arrow-down-1-9">
+    Sorted by date and time in descending order
+  </Card>
+  <Card title="Limited Display" icon="list">
+    Shows most recent 10 records to keep page fast
+  </Card>
+  <Card title="Teacher Context" icon="user-tie">
+    Includes which teacher's class the attendance was for
+  </Card>
+  <Card title="Visual Status" icon="palette">
+    Color-coded status badges for easy scanning
+  </Card>
+</CardGroup>
+
+## Student Statistics
+
+Students can view personal attendance statistics on their dashboard.
+
+### Statistics Calculation
+
+```php student_dashboard.php:117-126
+$stmt = $pdo->prepare("SELECT 
+    COUNT(*) as total_attendance,
+    COUNT(DISTINCT DATE(date)) as days_attended,
+    MAX(date) as last_attendance
+    FROM attendance 
+    WHERE student_id = ?");
+$stmt->execute([$student['student_id']]);
+$stats = $stmt->fetch();
+```
+
+### Student Stats Display
+
+```php student_dashboard.php:128-141
+<div class="stats-container">
+    <div class="stat-card">
+        <div class="stat-number"><?php echo $stats['total_attendance']; ?></div>
+        <div class="stat-label">Total Check-ins</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number"><?php echo $stats['days_attended']; ?></div>
+        <div class="stat-label">Days Attended</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number"><?php echo $stats['last_attendance'] ? date('M d', strtotime($stats['last_attendance'])) : 'N/A'; ?></div>
+        <div class="stat-label">Last Attendance</div>
+    </div>
+</div>
+```
+
+<CardGroup cols={3}>
+  <Card title="Total Check-ins" icon="clipboard-check">
+    All attendance records (may include multiple per day)
+  </Card>
+  <Card title="Days Attended" icon="calendar-days">
+    Distinct dates with at least one check-in
+  </Card>
+  <Card title="Last Attendance" icon="calendar">
+    Most recent attendance date
+  </Card>
+</CardGroup>
+
+## Data Persistence
+
+Attendance records are permanent and survive various system operations.
+
+### What Deletes Attendance Records
+
+<Warning>
+Attendance records are only deleted when:
+- The entire class is deleted
+- A teacher deletes their account
+
+Attendance records are **NOT** deleted when:
+- A student is removed from a class
+- A class schedule is modified
+- A student changes their password or email
+</Warning>
+
+### Database Structure
+
+Attendance records store:
+- `student_id` - Who attended
+- `class_id` - Which class
+- `date` - Which day (YYYY-MM-DD)
+- `time` - What time (HH:MM:SS)
+- `status` - on-time, late, or absent
+
+```sql
+CREATE TABLE attendance (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id VARCHAR(50),
+    class_id INT,
+    date DATE,
+    time TIME,
+    status VARCHAR(20)
+);
+```
+
+## Duplicate Prevention
+
+The system prevents students from checking in multiple times for the same class on the same day.
+
+### Duplicate Check
+
+```php process_attendance.php:46-54
+// Check if attendance already marked
+$stmt = $pdo->prepare("
+    SELECT * FROM attendance 
+    WHERE student_id = ? 
+    AND class_id = ? 
+    AND date = CURRENT_DATE()
+");
+$stmt->execute([$student_id, $student['class_id']]);
+```
+
+### Duplicate Response
+
+```php process_attendance.php:76-78
+if ($stmt->rowCount() == 0) {
+    // Mark attendance
+} else {
+    echo "⚠️ Attendance already marked for this class today";
+}
+```
+
+<Info>
+If a student scans their QR code multiple times in the same day for the same class, the system displays a warning message and does not create a duplicate record. The original attendance record remains unchanged.
+</Info>
+
+## Cross-Class Attendance
+
+Students can have attendance records in multiple classes from different teachers on the same day.
+
+### Example Scenario
+
+A student can check in to:
+- Professor Smith's Math class at 9:00 AM (on-time)
+- Professor Jones's Science class at 11:00 AM (on-time)  
+- Professor Brown's English class at 2:00 PM (late)
+
+All three records are stored independently with their own timestamps and statuses.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Daily Review" icon="calendar-check">
+    Check today's attendance at the end of each class to catch any issues
+  </Card>
+  <Card title="Manual Corrections" icon="pen">
+    Use status updates to fix scan errors or technical issues
+  </Card>
+  <Card title="Grace Period Balance" icon="scale-balanced">
+    Set grace periods that balance punctuality with fairness
+  </Card>
+  <Card title="Regular Monitoring" icon="chart-line">
+    Review attendance rates weekly to identify trends
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Student Not Appearing in List
+
+**Cause:** Student not enrolled in the selected class
+
+**Solution:** Go to Class Management and add the student to the class
+
+### Cannot Update Status
+
+**Cause:** Trying to change status for a class you don't own
+
+**Solution:** Verify you selected the correct class in the dropdown
+
+### Attendance Marked as Absent
+
+**Cause:** Student didn't scan QR code before end of day
+
+**Solution:** Manually change status to on-time or late if they were present
+
+### Duplicate Scan Warning
+
+**Cause:** Student already scanned for this class today
+
+**Solution:** No action needed - original record is preserved. Use status update if time needs correction.

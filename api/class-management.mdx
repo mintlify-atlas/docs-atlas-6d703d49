@@ -1,0 +1,495 @@
+---
+title: 'Class Management'
+description: 'Create classes, manage student enrollment, Excel import/export functionality'
+icon: 'school'
+---
+
+Manage classes, student enrollment, and bulk operations through Excel import/export.
+
+## Create Class
+
+**Endpoint:** `manage_classes.php`
+
+**Method:** POST
+
+**Authentication:** Teacher session required
+
+### Request Parameters
+
+<ParamField body="action" type="string" required>
+  Must be set to `create_class`
+</ParamField>
+
+<ParamField body="class_name" type="string" required>
+  Name of the class to create
+</ParamField>
+
+### Database Operation
+
+```sql
+INSERT INTO classes (teacher_id, name) 
+VALUES (?, ?)
+```
+
+**Parameters:**
+- `teacher_id` - From session (`$_SESSION['teacher_id']`)
+- `name` - Class name from request
+
+### Response
+
+**Success:**
+```php
+$_SESSION['success'] = "Class created successfully";
+```
+
+Redirects to `manage_classes.php`
+
+<Note>
+  Each class is owned by the teacher who created it. The teacher_id is automatically set from the session.
+</Note>
+
+---
+
+## Add Student to Class
+
+**Endpoint:** `manage_classes.php`
+
+**Method:** POST
+
+**Authentication:** Teacher session required
+
+### Request Parameters
+
+<ParamField body="action" type="string" required>
+  Must be set to `add_student`
+</ParamField>
+
+<ParamField body="class_id" type="integer" required>
+  ID of the class to add student to
+</ParamField>
+
+<ParamField body="student_id" type="string" required>
+  Student identifier to add
+</ParamField>
+
+### Validation Process
+
+1. **Verify Class Ownership:**
+   ```sql
+   SELECT id FROM classes 
+   WHERE id = ? AND teacher_id = ?
+   ```
+
+2. **Check Student Exists:**
+   ```sql
+   SELECT * FROM students 
+   WHERE student_id = ?
+   ```
+
+3. **Check Existing Enrollment:**
+   ```sql
+   SELECT cs.class_id, c.name 
+   FROM class_students cs
+   JOIN classes c ON cs.class_id = c.id
+   WHERE cs.student_id = ? AND c.teacher_id = ?
+   ```
+
+4. **Add to Class:**
+   ```sql
+   INSERT INTO class_students (class_id, student_id) 
+   VALUES (?, ?)
+   ```
+
+### Enrollment Rules
+
+<Warning>
+  Students can be enrolled in multiple classes from different teachers, but only ONE class per teacher.
+</Warning>
+
+### Response Messages
+
+**Success:**
+```php
+$_SESSION['success'] = "Student added successfully";
+```
+
+**Errors:**
+- "Invalid class selected" - Class doesn't belong to teacher
+- "Student ID not found" - Student doesn't exist in database
+- "Student is already enrolled in this class"
+- "Student is already enrolled in your class: [class_name]. A student can only be enrolled in one class per teacher."
+
+---
+
+## Remove Student from Class
+
+**Endpoint:** `manage_classes.php`
+
+**Method:** POST
+
+**Authentication:** Teacher session required
+
+### Request Parameters
+
+<ParamField body="action" type="string" required>
+  Must be set to `remove_student`
+</ParamField>
+
+<ParamField body="class_id" type="integer" required>
+  ID of the class
+</ParamField>
+
+<ParamField body="student_id" type="string" required>
+  Student identifier to remove
+</ParamField>
+
+### Database Operation
+
+```sql
+DELETE FROM class_students 
+WHERE class_id = ? AND student_id = ?
+```
+
+### Response
+
+**Success:**
+```php
+$_SESSION['success'] = "Student removed successfully";
+```
+
+<Note>
+  Removing a student from a class does NOT delete their attendance history.
+</Note>
+
+---
+
+## Delete Class
+
+**Endpoint:** `manage_classes.php`
+
+**Method:** POST
+
+**Authentication:** Teacher session required
+
+### Request Parameters
+
+<ParamField body="action" type="string" required>
+  Must be set to `delete_class`
+</ParamField>
+
+<ParamField body="class_id" type="integer" required>
+  ID of the class to delete
+</ParamField>
+
+### Deletion Process
+
+Uses database transaction to ensure data integrity:
+
+```php
+$pdo->beginTransaction();
+
+try {
+    // 1. Verify ownership
+    SELECT * FROM classes WHERE id = ? AND teacher_id = ?
+    
+    // 2. Delete attendance records
+    DELETE FROM attendance WHERE class_id = ?
+    
+    // 3. Delete schedules
+    DELETE FROM class_schedules WHERE class_id = ?
+    
+    // 4. Delete student enrollments
+    DELETE FROM class_students WHERE class_id = ?
+    
+    // 5. Delete class
+    DELETE FROM classes WHERE id = ?
+    
+    $pdo->commit();
+} catch (Exception $e) {
+    $pdo->rollBack();
+}
+```
+
+### Cascade Deletions
+
+Deleting a class removes:
+- All attendance records for the class
+- All class schedules
+- All student enrollments
+- The class itself
+
+### Response Messages
+
+**Success:**
+```php
+$_SESSION['success'] = "Class deleted successfully";
+```
+
+**Errors:**
+- "You don't have permission to delete this class"
+- "Error deleting class: [exception message]"
+
+<Warning>
+  Deleting a class is permanent and cannot be undone. All associated data (attendance, schedules, enrollments) will be deleted.
+</Warning>
+
+---
+
+## View Class Students
+
+**Query:** Get all students enrolled in a class
+
+```sql
+SELECT s.* 
+FROM students s
+JOIN class_students cs ON s.student_id = cs.student_id
+WHERE cs.class_id = ?
+ORDER BY s.name
+```
+
+### Response Fields
+
+<ResponseField name="student_id" type="string">
+  Unique student identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Student's full name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Student's email address
+</ResponseField>
+
+---
+
+## Excel Import
+
+**Endpoint:** `manage_classes.php`
+
+**Method:** POST
+
+**Authentication:** Teacher session required
+
+**Requirement:** PhpSpreadsheet library must be installed
+
+### Request Parameters
+
+<ParamField body="action" type="string" required>
+  Must be set to `import`
+</ParamField>
+
+<ParamField body="class_id" type="integer" required>
+  ID of the class to import students into
+</ParamField>
+
+<ParamField body="excel_file" type="file" required>
+  Excel or CSV file (.xlsx, .xls, .csv)
+</ParamField>
+
+<ParamField body="has_header" type="checkbox">
+  Set to "1" if file has header row (default: checked)
+</ParamField>
+
+### File Format
+
+**Column Structure:**
+
+| Column A | Column B | Column C |
+|----------|----------|----------|
+| Student ID | Full Name | Email |
+| 12345 | John Doe | john@example.com |
+| 67890 | Jane Smith | jane@example.com |
+
+**Supported Formats:**
+- `.xlsx` - Excel 2007+
+- `.xls` - Excel 97-2003
+- `.csv` - Comma-separated values
+
+### Import Process
+
+1. **Validate File:**
+   ```php
+   $file_extension = pathinfo($_FILES['excel_file']['name'], PATHINFO_EXTENSION);
+   $allowed_extensions = ['xlsx', 'xls', 'csv'];
+   ```
+
+2. **Read File:**
+   ```php
+   $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+   $spreadsheet = $reader->load($_FILES['excel_file']['tmp_name']);
+   $rows = $spreadsheet->getActiveSheet()->toArray();
+   ```
+
+3. **Process Each Row:**
+   - Skip header row if `has_header` is checked
+   - Skip empty rows
+   - Check if student exists
+   - Create new student if data is complete
+   - Check for existing enrollment with this teacher
+   - Add to class
+
+### Auto-Create Students
+
+If a student_id doesn't exist but name and email are provided:
+
+```php
+$default_password = password_hash('changeme123', PASSWORD_DEFAULT);
+
+INSERT INTO students (student_id, name, email, password) 
+VALUES (?, ?, ?, ?)
+```
+
+<Note>
+  New students created during import get the default password: `changeme123`
+</Note>
+
+### Response Messages
+
+**Success:**
+```php
+$_SESSION['success'] = "Successfully imported {$imported} students.";
+if ($skipped > 0) {
+    $message .= " Skipped {$skipped} students.";
+}
+```
+
+**Import Errors:**
+```php
+$_SESSION['import_errors'] = [
+    "Failed to create student: 12345",
+    "Incomplete data for student: 67890",
+    "Student 11111 is already enrolled in your class: Math 101"
+];
+```
+
+**File Errors:**
+- "Error uploading file. Please try again."
+- "Invalid class selected"
+- "Invalid file format. Please upload an Excel file (.xlsx, .xls) or CSV file."
+- "Error processing file: [exception message]"
+
+---
+
+## Excel Export
+
+**Endpoint:** `manage_classes.php`
+
+**Method:** POST
+
+**Authentication:** Teacher session required
+
+**Requirement:** PhpSpreadsheet library must be installed
+
+### Request Parameters
+
+<ParamField body="action" type="string" required>
+  Must be set to `export`
+</ParamField>
+
+<ParamField body="class_id" type="integer" required>
+  ID of the class to export
+</ParamField>
+
+### Export Process
+
+1. **Validate Class Ownership:**
+   ```sql
+   SELECT * FROM classes 
+   WHERE id = ? AND teacher_id = ?
+   ```
+
+2. **Get Students:**
+   ```sql
+   SELECT s.student_id, s.name, s.email 
+   FROM students s
+   JOIN class_students cs ON s.student_id = cs.student_id
+   WHERE cs.class_id = ?
+   ORDER BY s.name
+   ```
+
+3. **Create Spreadsheet:**
+   ```php
+   $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+   $sheet = $spreadsheet->getActiveSheet();
+   
+   // Add headers
+   $sheet->setCellValue('A1', 'Student ID');
+   $sheet->setCellValue('B1', 'Name');
+   $sheet->setCellValue('C1', 'Email');
+   
+   // Add data
+   $row = 2;
+   foreach ($students as $student) {
+       $sheet->setCellValue('A' . $row, $student['student_id']);
+       $sheet->setCellValue('B' . $row, $student['name']);
+       $sheet->setCellValue('C' . $row, $student['email']);
+       $row++;
+   }
+   ```
+
+4. **Output File:**
+   ```php
+   header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+   header('Content-Disposition: attachment;filename="' . $class['name'] . '_roster.xlsx"');
+   
+   $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($spreadsheet, 'Xlsx');
+   $writer->save('php://output');
+   ```
+
+### File Output
+
+**Filename:** `{class_name}_roster.xlsx`
+
+**Example:** `Computer_Science_101_roster.xlsx`
+
+**Format:** Excel 2007+ (.xlsx)
+
+**Columns:**
+- A: Student ID
+- B: Name
+- C: Email
+
+**Features:**
+- Auto-sized columns
+- Header row included
+- Sorted by student name
+
+### Response
+
+File is downloaded directly to the browser. No page redirect.
+
+**Error:**
+```php
+$_SESSION['error'] = "Invalid class selected";
+```
+
+<Note>
+  PhpSpreadsheet library must be installed via Composer for import/export functionality.
+</Note>
+
+---
+
+## Library Installation
+
+**Check Installation:**
+```php
+$phpspreadsheet_installed = class_exists('PhpOffice\PhpSpreadsheet\Spreadsheet');
+```
+
+**Install via Composer:**
+```bash
+composer require phpoffice/phpspreadsheet
+```
+
+**Autoload:**
+```php
+require 'vendor/autoload.php';
+
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+```
+
+<Warning>
+  If PhpSpreadsheet is not installed, import/export buttons will be hidden and the functionality will be unavailable.
+</Warning>

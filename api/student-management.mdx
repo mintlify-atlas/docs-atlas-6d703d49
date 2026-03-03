@@ -1,0 +1,438 @@
+---
+title: 'Student Management'
+description: 'Student registration, profile updates, and QR code generation'
+icon: 'user-graduate'
+---
+
+Manage student accounts, profiles, and attendance QR codes within the QR Attendance System.
+
+## Student Registration
+
+**Endpoint:** `register.php`
+
+**Method:** POST
+
+**Description:** Creates a new student account and generates a unique QR code for attendance tracking.
+
+### Request Parameters
+
+<ParamField body="user_type" type="string" required>
+  Must be set to `student`
+</ParamField>
+
+<ParamField body="student_id" type="string" required>
+  Unique student identifier. Can be any numeric format.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Student's full name
+</ParamField>
+
+<ParamField body="email" type="email" required>
+  Valid email address for account recovery
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Account password (minimum 8 characters)
+</ParamField>
+
+<ParamField body="confirm_password" type="string" required>
+  Password confirmation (must match password)
+</ParamField>
+
+### Registration Process
+
+1. **Validation:**
+   - Verify passwords match
+   - Check if student_id already exists
+
+2. **Database Insertion:**
+   ```sql
+   INSERT INTO students (student_id, name, email, password, qr_code) 
+   VALUES (?, ?, ?, ?, ?)
+   ```
+
+3. **QR Code Generation:**
+   - QR data contains the student_id
+   - Generated using QRCode.js library
+   - Displayed immediately after successful registration
+
+### Response Examples
+
+**Success:**
+```html
+<div class="success-message">Student registration successful! Your QR code is ready.</div>
+```
+
+The system generates a QR code using:
+```javascript
+new QRCode(document.getElementById("qrcode"), {
+    text: "12345",  // student_id
+    width: 128,
+    height: 128,
+    colorDark: "#4361ee",
+    colorLight: "#ffffff"
+});
+```
+
+**Errors:**
+- "Passwords do not match"
+- "Student ID already exists"
+- "Registration failed: [database error]"
+
+<Note>
+  The QR code contains only the student_id and is stored in the database for reference. Students use this QR code to mark their attendance.
+</Note>
+
+---
+
+## Student Profile Management
+
+**Page:** `student_dashboard.php`
+
+**Authentication:** Required (student session)
+
+Students can view and update their profile information through the dashboard.
+
+### View Profile Information
+
+**Database Query:**
+```sql
+SELECT * FROM students WHERE id = ?
+```
+
+### Response Fields
+
+<ResponseField name="student_id" type="string">
+  Unique student identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Student's full name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Registered email address
+</ResponseField>
+
+<ResponseField name="qr_code" type="string">
+  QR code data (typically the student_id)
+</ResponseField>
+
+---
+
+## Update Email Address
+
+**Endpoint:** `student_dashboard.php`
+
+**Method:** POST
+
+**Authentication:** Student session required
+
+### Request Parameters
+
+<ParamField body="update_email" type="string" required>
+  Action identifier (set to any value)
+</ParamField>
+
+<ParamField body="new_email" type="email" required>
+  New email address
+</ParamField>
+
+### Process Flow
+
+1. **Validation:**
+   - Check if email is already in use by another student
+   ```sql
+   SELECT * FROM students WHERE email = ? AND id != ?
+   ```
+
+2. **Update Database:**
+   ```sql
+   UPDATE students SET email = ? WHERE id = ?
+   ```
+
+### Response Messages
+
+**Success:**
+```html
+<div class="alert alert-success">Email updated successfully!</div>
+```
+
+**Error:**
+```html
+<div class="alert alert-danger">Email already in use by another account</div>
+```
+
+---
+
+## Change Password
+
+**Endpoint:** `student_dashboard.php`
+
+**Method:** POST
+
+**Authentication:** Student session required
+
+### Request Parameters
+
+<ParamField body="change_password" type="string" required>
+  Action identifier (set to any value)
+</ParamField>
+
+<ParamField body="current_password" type="string" required>
+  Current account password for verification
+</ParamField>
+
+<ParamField body="new_password" type="string" required>
+  New password (minimum 6 characters)
+</ParamField>
+
+<ParamField body="confirm_password" type="string" required>
+  Must match new_password
+</ParamField>
+
+### Validation Steps
+
+1. **Password Match:** Verify new_password === confirm_password
+2. **Current Password Verification:**
+   ```php
+   $stmt = $pdo->prepare("SELECT password FROM students WHERE id = ?");
+   $stmt->execute([$student_id]);
+   $user = $stmt->fetch();
+   
+   if (password_verify($current_password, $user['password'])) {
+       // Proceed with update
+   }
+   ```
+
+3. **Update Password:**
+   ```php
+   $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+   $stmt = $pdo->prepare("UPDATE students SET password = ? WHERE id = ?");
+   $stmt->execute([$hashed_password, $student_id]);
+   ```
+
+### Response Messages
+
+**Success:**
+```html
+<div class="alert alert-success">Password changed successfully!</div>
+```
+
+**Errors:**
+- "New passwords do not match"
+- "Current password is incorrect"
+
+<Warning>
+  The current password must be verified before allowing password changes to prevent unauthorized modifications.
+</Warning>
+
+---
+
+## QR Code Display
+
+**Page:** `student_dashboard.php`
+
+**Section:** Dashboard tab
+
+### QR Code Generation
+
+The QR code is dynamically generated on the student dashboard using JavaScript:
+
+```javascript
+new QRCode(document.getElementById("qrcode"), {
+    text: "<?php echo $student['student_id']; ?>",
+    width: 128,
+    height: 128
+});
+```
+
+### QR Code Data Format
+
+<ResponseField name="text" type="string">
+  Contains the student_id (e.g., "12345")
+</ResponseField>
+
+<ResponseField name="width" type="number">
+  QR code width in pixels (default: 128)
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  QR code height in pixels (default: 128)
+</ResponseField>
+
+### Usage
+
+1. Student displays QR code on screen
+2. Teacher scans QR code using scanner interface
+3. System processes attendance based on scanned student_id
+
+<Note>
+  The QR code is displayed prominently in the student dashboard and can be shown to teachers during class for attendance marking.
+</Note>
+
+---
+
+## View Class Enrollment
+
+**Query:** Get student's enrolled class
+
+```sql
+SELECT c.id as class_id, c.name as class_name, t.name as teacher_name 
+FROM class_students cs
+JOIN classes c ON cs.class_id = c.id
+JOIN teachers t ON c.teacher_id = t.teacher_id
+WHERE cs.student_id = ?
+```
+
+### Response Fields
+
+<ResponseField name="class_id" type="integer">
+  Unique class identifier
+</ResponseField>
+
+<ResponseField name="class_name" type="string">
+  Name of the enrolled class
+</ResponseField>
+
+<ResponseField name="teacher_name" type="string">
+  Name of the class teacher
+</ResponseField>
+
+<Note>
+  Students can only be enrolled in one class per teacher, but can be in multiple classes from different teachers.
+</Note>
+
+---
+
+## View Class Schedule
+
+**Query:** Get schedule for enrolled class
+
+```sql
+SELECT *, 
+CASE day_of_week 
+    WHEN 1 THEN 'Sunday'
+    WHEN 2 THEN 'Monday'
+    WHEN 3 THEN 'Tuesday'
+    WHEN 4 THEN 'Wednesday'
+    WHEN 5 THEN 'Thursday'
+    WHEN 6 THEN 'Friday'
+    WHEN 7 THEN 'Saturday'
+END as day_name
+FROM class_schedules 
+WHERE class_id = ?
+ORDER BY day_of_week
+```
+
+### Response Fields
+
+<ResponseField name="day_of_week" type="integer">
+  Day number (1=Sunday, 7=Saturday)
+</ResponseField>
+
+<ResponseField name="day_name" type="string">
+  Human-readable day name
+</ResponseField>
+
+<ResponseField name="start_time" type="time">
+  Class start time (HH:MM:SS format)
+</ResponseField>
+
+<ResponseField name="grace_period" type="integer">
+  Minutes after start_time before student is marked late
+</ResponseField>
+
+### Displayed Information
+
+- **Class Name:** From enrolled class
+- **Start Time:** Formatted as "h:i A" (e.g., 09:00 AM)
+- **Late After:** Calculated as start_time + grace_period minutes
+
+Example display:
+```
+Monday
+Class: Computer Science 101
+Start Time: 09:00 AM
+Late After: 09:15 AM
+```
+
+---
+
+## View Attendance Statistics
+
+**Query:** Calculate student attendance metrics
+
+```sql
+SELECT 
+    COUNT(*) as total_attendance,
+    COUNT(DISTINCT DATE(date)) as days_attended,
+    MAX(date) as last_attendance
+FROM attendance 
+WHERE student_id = ?
+```
+
+### Response Fields
+
+<ResponseField name="total_attendance" type="integer">
+  Total number of attendance records (check-ins)
+</ResponseField>
+
+<ResponseField name="days_attended" type="integer">
+  Number of unique days with attendance
+</ResponseField>
+
+<ResponseField name="last_attendance" type="date">
+  Most recent attendance date
+</ResponseField>
+
+---
+
+## View Attendance History
+
+**Query:** Get recent attendance records
+
+```sql
+SELECT a.*, c.name as class_name, t.name as teacher_name
+FROM attendance a
+LEFT JOIN classes c ON a.class_id = c.id
+LEFT JOIN teachers t ON c.teacher_id = t.teacher_id
+WHERE a.student_id = ? 
+ORDER BY a.date DESC, a.time DESC 
+LIMIT 10
+```
+
+### Response Fields
+
+<ResponseField name="date" type="date">
+  Attendance date
+</ResponseField>
+
+<ResponseField name="time" type="time">
+  Check-in time
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Attendance status: `on-time`, `late`, or `absent`
+</ResponseField>
+
+<ResponseField name="class_name" type="string">
+  Name of the class
+</ResponseField>
+
+<ResponseField name="teacher_name" type="string">
+  Name of the teacher who recorded attendance
+</ResponseField>
+
+### Status Display
+
+```php
+if ($status == 'on-time') {
+    echo "<span class='status-badge on-time'>On Time</span>";
+} elseif ($status == 'late') {
+    echo "<span class='status-badge late'>Late</span>";
+} elseif ($status == 'absent') {
+    echo "<span class='status-badge absent'>Absent</span>";
+}
+```

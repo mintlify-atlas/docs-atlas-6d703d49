@@ -1,0 +1,231 @@
+---
+title: Installation
+description: Complete installation guide for setting up QR Attendance System on your server
+---
+
+# Installation
+
+This guide walks you through installing the QR Attendance System on your server.
+
+## Prerequisites
+
+Before you begin, ensure your server meets these requirements:
+
+### Required software
+
+- **PHP 7.4 or higher** with the following extensions:
+  - `pdo_mysql` - Database connectivity
+  - `gd` - Image processing for QR codes
+  - `fileinfo` - File type detection for Excel imports
+  - `mbstring` - Multi-byte string handling
+
+- **MySQL 5.7 or higher** or **MariaDB 10.2 or higher**
+
+- **Web server**: Apache 2.4+ or Nginx 1.18+
+
+- **Composer** - PHP dependency manager
+
+### Browser requirements
+
+For QR code scanning functionality:
+- Modern browser with camera access support (Chrome, Firefox, Safari, Edge)
+- HTTPS connection (required for camera access)
+
+<Warning>
+Camera access for QR scanning requires HTTPS. Use a valid SSL certificate in production.
+</Warning>
+
+## Installation steps
+
+<Steps>
+  <Step title="Download the source code">
+    Clone or download the repository to your web server:
+
+    ```bash
+    git clone https://github.com/noob-Vix/qr_attendance.git
+    cd qr_attendance
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install required PHP packages using Composer:
+
+    ```bash
+    composer install
+    ```
+
+    This will install:
+    - `phpoffice/phpspreadsheet` - Excel file handling for student import/export
+  </Step>
+
+  <Step title="Configure database connection">
+    Edit `config.php` to set your database credentials:
+
+    ```php config.php
+    <?php
+    session_start();
+    $host = 'localhost';        // Database host
+    $dbname = 'qr_attendance';  // Database name
+    $username = 'root';         // Database username
+    $password = '';             // Database password
+    ```
+
+    <Note>
+    The system will automatically create all required tables when you first access the application.
+    </Note>
+  </Step>
+
+  <Step title="Create the database">
+    Create a new MySQL database:
+
+    ```sql
+    CREATE DATABASE qr_attendance CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    ```
+
+    The application will automatically create all required tables on first run, including:
+    - `students` - Student records and QR codes
+    - `teachers` - Teacher accounts
+    - `admins` - Administrator accounts
+    - `classes` - Class definitions
+    - `class_students` - Student-class enrollments
+    - `class_schedules` - Class schedules and timing
+    - `attendance` - Attendance records
+  </Step>
+
+  <Step title="Configure web server">
+    Point your web server document root to the application directory.
+
+    **Apache configuration example:**
+
+    ```apache
+    <VirtualHost *:80>
+        ServerName attendance.example.com
+        DocumentRoot /var/www/qr_attendance
+        
+        <Directory /var/www/qr_attendance>
+            AllowOverride All
+            Require all granted
+        </Directory>
+    </VirtualHost>
+    ```
+
+    **Nginx configuration example:**
+
+    ```nginx
+    server {
+        listen 80;
+        server_name attendance.example.com;
+        root /var/www/qr_attendance;
+        index index.php;
+
+        location / {
+            try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        location ~ \.php$ {
+            fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+            fastcgi_index index.php;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Set file permissions">
+    Ensure the web server has write access to necessary directories:
+
+    ```bash
+    chmod 755 /var/www/qr_attendance
+    chown -R www-data:www-data /var/www/qr_attendance
+    ```
+  </Step>
+
+  <Step title="Access the application">
+    Navigate to your server URL in a web browser:
+
+    ```
+    http://attendance.example.com
+    ```
+
+    You should see the login page. The system is now ready for initial configuration.
+  </Step>
+</Steps>
+
+## Default credentials
+
+The system creates a default administrator account on first run:
+
+- **Username**: `admin`
+- **Password**: `admin123`
+
+<Warning>
+Change the default admin password immediately after first login for security purposes.
+</Warning>
+
+## SSL/HTTPS setup (recommended)
+
+For camera access in QR scanning, you need HTTPS. Use Let's Encrypt for free SSL certificates:
+
+```bash
+# Install Certbot
+sudo apt-get install certbot python3-certbot-apache  # For Apache
+# OR
+sudo apt-get install certbot python3-certbot-nginx   # For Nginx
+
+# Obtain certificate
+sudo certbot --apache -d attendance.example.com      # For Apache
+# OR
+sudo certbot --nginx -d attendance.example.com       # For Nginx
+```
+
+## Verification
+
+Verify your installation by checking:
+
+1. **Database connection**: Access the application - if you see the login page, database connection is successful
+2. **Dependencies**: Try registering a student - QR code should generate
+3. **Camera access**: Login as a teacher and open the scanner - browser should request camera permission
+
+## Troubleshooting
+
+### Database connection failed
+
+- Verify MySQL service is running: `sudo systemctl status mysql`
+- Check database credentials in `config.php`
+- Ensure database exists: `SHOW DATABASES;`
+
+### QR code not generating
+
+- Check that GD extension is installed: `php -m | grep gd`
+- Clear browser cache and reload
+- Check browser console for JavaScript errors
+
+### Camera not accessible
+
+- Ensure site is served over HTTPS
+- Check browser permissions for camera access
+- Verify camera is not in use by another application
+
+### Excel import/export not working
+
+- Verify Composer dependencies are installed: `composer install`
+- Check that `fileinfo` PHP extension is enabled
+- Ensure upload directory has write permissions
+
+## Next steps
+
+Now that installation is complete:
+
+1. Follow the [quickstart guide](/quickstart) to configure your first class
+2. Read the [teacher guide](/guides/teacher-guide) to learn about class management
+3. Review [security configuration](/configuration/security) for production deployment
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Set up your first class
+  </Card>
+  <Card title="Security Configuration" icon="shield" href="/configuration/security">
+    Secure your installation
+  </Card>
+</CardGroup>

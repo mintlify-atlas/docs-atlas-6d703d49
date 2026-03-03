@@ -1,0 +1,284 @@
+---
+title: Student Guide
+description: Complete guide for students using the QR Attendance System
+---
+
+# Student guide
+
+This guide covers everything students need to know about using the QR Attendance System.
+
+## Getting started
+
+### Registration
+
+<Steps>
+  <Step title="Navigate to registration page">
+    From the login page, click the **Register** link.
+  </Step>
+
+  <Step title="Fill in your information">
+    The **Student Registration** tab should be active by default. Enter:
+
+    - **Student ID**: Your unique student identifier
+    - **Name**: Your full name
+    - **Email**: Valid email address for password recovery
+    - **Password**: At least 8 characters
+    - **Confirm Password**: Must match your password
+  </Step>
+
+  <Step title="Save your QR code">
+    After successful registration, your unique QR code will be displayed. You can:
+    - Take a screenshot to save it
+    - Access it anytime from your dashboard after login
+  </Step>
+</Steps>
+
+<Note>
+Your QR code contains your student ID and is unique to you. Keep it accessible for quick attendance marking.
+</Note>
+
+## Student dashboard
+
+After logging in, you'll see your personalized dashboard with three main tabs:
+
+### Dashboard tab
+
+The main dashboard displays:
+
+**Attendance Statistics**
+- **Total Check-ins**: Total number of times you've marked attendance
+- **Days Attended**: Number of unique days you've attended
+- **Last Attendance**: Date of your most recent attendance
+
+**Your QR Code**
+- Displayed prominently for easy access
+- Generated using QRCode.js (128x128 pixels)
+- Encodes your student ID
+- Show this to your teacher during class
+
+**Recent Attendance History**
+- Shows your 10 most recent attendance records
+- Displays date, time, teacher name, and status for each entry
+- Status indicators:
+  - **On Time**: Marked within the grace period
+  - **Late**: Marked after the grace period
+  - **Absent**: No attendance recorded
+
+### Profile tab
+
+View and update your personal information:
+
+**Profile Information**
+- Name (read-only)
+- Student ID (read-only)
+- Email address
+- Class enrollment (if enrolled)
+- Teacher name (if enrolled)
+
+**Available Actions**
+- **Change Password**: Update your account password
+- **Update Email**: Change your email address
+
+### Schedule tab
+
+View your class schedule including:
+- Class name
+- Teacher name
+- Days of the week
+- Start times
+- Grace periods (how long after start time you can still be marked on-time)
+
+<Info>
+If you're not enrolled in any class yet, you'll see a message indicating this. Contact your teacher to be added to their class roster.
+</Info>
+
+## Marking attendance
+
+<Steps>
+  <Step title="Display your QR code">
+    Login to your dashboard and ensure the **Dashboard** tab is active. Your QR code is displayed in the center of the page.
+  </Step>
+
+  <Step title="Show QR code to teacher">
+    When your teacher opens their QR scanner during class, hold up your device or show your saved QR code screenshot.
+  </Step>
+
+  <Step title="Wait for confirmation">
+    The teacher's screen will show a confirmation message:
+    - ✅ On-time attendance marked
+    - ⚠️ Late attendance marked
+    - ❌ Error messages if there's an issue
+  </Step>
+
+  <Step title="Check your dashboard">
+    Your attendance history updates automatically. You can verify the record was created in the "Recent Attendance History" section.
+  </Step>
+</Steps>
+
+### Attendance status explained
+
+Your attendance status is automatically calculated based on:
+
+- **On-time**: Scanned at or before `start_time + grace_period`
+- **Late**: Scanned after the grace period has expired
+- **Absent**: No QR code scan recorded for that class session
+
+<Tip>
+Check your class schedule to know the exact grace period for each class. Most classes have a 15-minute grace period by default.
+</Tip>
+
+## Managing your profile
+
+### Changing your password
+
+<Steps>
+  <Step title="Open password modal">
+    Click the **Profile** tab, then click **Change Password**.
+  </Step>
+
+  <Step title="Enter password details">
+    - **Current Password**: Your existing password
+    - **New Password**: Your new password (minimum 8 characters)
+    - **Confirm New Password**: Must match new password
+  </Step>
+
+  <Step title="Submit">
+    Click **Change Password**. You'll see a success message if the password was updated.
+  </Step>
+</Steps>
+
+<Warning>
+If you enter an incorrect current password, you'll see an error: "Current password is incorrect". Make sure you're entering your current password correctly.
+</Warning>
+
+### Updating your email
+
+<Steps>
+  <Step title="Open email modal">
+    Click the **Profile** tab, then click **Update Email**.
+  </Step>
+
+  <Step title="Enter new email">
+    Type your new email address in the form.
+  </Step>
+
+  <Step title="Submit">
+    Click **Update Email**. You'll see a success message if the email was updated.
+  </Step>
+</Steps>
+
+<Note>
+Email addresses must be unique. If another student is using that email, you'll see an error: "Email already in use by another account".
+</Note>
+
+## Password recovery
+
+If you forget your password:
+
+<Steps>
+  <Step title="Click Forgot Password">
+    From the login page, click **Forgot Password?**
+  </Step>
+
+  <Step title="Enter your email">
+    Provide the email address associated with your student account.
+  </Step>
+
+  <Step title="Check your email">
+    You'll receive a password reset link (requires email configuration by administrator).
+  </Step>
+
+  <Step title="Reset password">
+    Click the link in the email and enter your new password.
+  </Step>
+</Steps>
+
+<Info>
+Password reset tokens expire after 1 hour for security. If your link has expired, request a new reset.
+</Info>
+
+## Viewing your class information
+
+Once enrolled in a class, you can view:
+
+### Class details
+- **Class Name**: E.g., "Computer Science 101"
+- **Teacher Name**: Your instructor's name
+- **Enrollment Status**: Displayed in your profile
+
+### Schedule information
+Click the **Schedule** tab to see:
+- Days the class meets
+- Start time for each day
+- Grace period (late arrival tolerance)
+- Calculated "late after" time
+
+### Attendance statistics
+- Total check-ins across all dates
+- Number of unique days attended
+- Most recent attendance date
+- Full attendance history with status for each session
+
+## Tips for students
+
+<Accordion title="Save your QR code">
+  Take a screenshot of your QR code immediately after registration. Save it to your device for quick access even if you can't log in.
+</Accordion>
+
+<Accordion title="Arrive on time">
+  Check your schedule tab to know the exact grace period. Arriving within this window ensures you're marked on-time.
+</Accordion>
+
+<Accordion title="Verify attendance">
+  Always check your "Recent Attendance History" after being scanned to ensure your attendance was recorded correctly.
+</Accordion>
+
+<Accordion title="Keep your password secure">
+  Don't share your password. Use the password reset feature if you forget it rather than sharing credentials.
+</Accordion>
+
+<Accordion title="Update your email">
+  Keep your email address current for password recovery and potential notifications from your institution.
+</Accordion>
+
+## Troubleshooting
+
+### My QR code won't display
+- Clear your browser cache and reload
+- Ensure JavaScript is enabled
+- Try a different browser (Chrome or Firefox recommended)
+- Check browser console for errors
+
+### Attendance wasn't recorded
+- Verify you're enrolled in the teacher's class
+- Check that today matches a scheduled class day
+- Ask your teacher to manually mark you present
+- Teachers can manually update attendance status from their dashboard
+
+### Can't login
+- Verify you're using your student ID, not email
+- Use the **Forgot Password** link if needed
+- Ensure Caps Lock is off
+- Contact your administrator if issues persist
+
+### Not enrolled in any class
+- Contact your teacher to be added to their class roster
+- Teachers manage enrollments through **Manage Classes**
+- You can be in multiple classes from different teachers
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="View Your Schedule" icon="calendar" href="#schedule-tab">
+    Check your class schedule and grace periods
+  </Card>
+  <Card title="QR Attendance Feature" icon="qrcode" href="/features/qr-attendance">
+    Learn more about how QR attendance works
+  </Card>
+  <Card title="Attendance Tracking" icon="chart-line" href="/features/attendance-tracking">
+    Understand attendance status and history
+  </Card>
+  <Card title="Teacher Guide" icon="chalkboard-user" href="/guides/teacher-guide">
+    See what teachers can do in the system
+  </Card>
+</CardGroup>

@@ -1,0 +1,250 @@
+---
+title: 'Database Setup'
+description: 'Configure the MySQL database for the QR Attendance System'
+---
+
+## Overview
+
+The QR Attendance System uses MySQL as its database backend with PDO for secure database interactions. All database configuration and table initialization happens in `config.php`.
+
+## Database Configuration
+
+### Connection Settings
+
+The database connection is configured in `config.php:3-10` with the following parameters:
+
+```php config.php
+$host = 'localhost';
+$dbname = 'qr_attendance';
+$username = 'root';
+$password = '';
+
+try {
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+```
+
+<Note>
+The PDO connection uses `PDO::ERRMODE_EXCEPTION` to throw exceptions on errors, enabling proper error handling throughout the application.
+</Note>
+
+### Setup Steps
+
+<Steps>
+  <Step title="Create the database">
+    Create a MySQL database named `qr_attendance`:
+    
+    ```sql
+    CREATE DATABASE qr_attendance;
+    ```
+  </Step>
+  
+  <Step title="Update credentials">
+    Modify the connection parameters in `config.php` to match your MySQL setup:
+    
+    ```php
+    $host = 'localhost';      // Database host
+    $dbname = 'qr_attendance'; // Database name
+    $username = 'root';        // MySQL username
+    $password = '';            // MySQL password
+    ```
+  </Step>
+  
+  <Step title="Run the application">
+    Access any page of the application. The tables will be automatically created on first run.
+  </Step>
+</Steps>
+
+## Database Schema
+
+All tables are created automatically when `config.php` is loaded. Below are the complete schemas:
+
+### Students Table
+
+Stores student account information and QR codes.
+
+```sql config.php:13-24
+CREATE TABLE IF NOT EXISTS students (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id VARCHAR(20) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    qr_code TEXT NOT NULL,
+    reset_token VARCHAR(64) NULL,
+    reset_token_expiry DATETIME NULL
+)
+```
+
+**Key Fields:**
+- `student_id`: Unique student identifier (e.g., numeric ID)
+- `qr_code`: Stores QR code data for attendance scanning
+- `reset_token`: Temporary token for password reset functionality
+- `reset_token_expiry`: Token expiration timestamp
+
+### Teachers Table
+
+Stores teacher account information.
+
+```sql config.php:34-44
+CREATE TABLE IF NOT EXISTS teachers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    teacher_id VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    reset_token VARCHAR(64) NULL,
+    reset_token_expiry DATETIME NULL
+)
+```
+
+**Key Fields:**
+- `teacher_id`: Unique teacher identifier (format: T followed by 4 digits, e.g., T1234)
+- `reset_token` and `reset_token_expiry`: Used for password reset flow
+
+### Admins Table
+
+Stores administrator credentials.
+
+```sql config.php:27-31
+CREATE TABLE IF NOT EXISTS admins (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL
+)
+```
+
+<Warning>
+A default admin account (username: `admin`, password: `admin123`) is created automatically. **Change this password immediately in production!**
+</Warning>
+
+### Classes Table
+
+Defines classes taught by teachers.
+
+```sql config.php:46-52
+CREATE TABLE IF NOT EXISTS classes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    teacher_id VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id)
+)
+```
+
+### Class Students Table
+
+Maps students to their enrolled classes (many-to-many relationship).
+
+```sql config.php:54-61
+CREATE TABLE IF NOT EXISTS class_students (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    student_id VARCHAR(50) NOT NULL,
+    FOREIGN KEY (class_id) REFERENCES classes(id),
+    FOREIGN KEY (student_id) REFERENCES students(student_id)
+)
+```
+
+### Class Schedules Table
+
+Defines when classes meet during the week.
+
+```sql config.php:63-72
+CREATE TABLE IF NOT EXISTS class_schedules (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    day_of_week INT NOT NULL,
+    start_time TIME NOT NULL,
+    grace_period INT NOT NULL DEFAULT 15,
+    UNIQUE KEY unique_class_day (class_id, day_of_week),
+    FOREIGN KEY (class_id) REFERENCES classes(id)
+)
+```
+
+**Key Fields:**
+- `day_of_week`: Integer representing day (0 = Sunday, 6 = Saturday)
+- `grace_period`: Minutes after start_time that students can still mark attendance
+
+### Attendance Table
+
+Records student attendance for each class session.
+
+```sql config.php:74-84
+CREATE TABLE IF NOT EXISTS attendance (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id VARCHAR(50) NOT NULL,
+    class_id INT NOT NULL,
+    date DATE NOT NULL,
+    time TIME NOT NULL,
+    status VARCHAR(10) DEFAULT 'absent',
+    FOREIGN KEY (student_id) REFERENCES students(student_id),
+    FOREIGN KEY (class_id) REFERENCES classes(id)
+)
+```
+
+**Status Values:**
+- `present`: Student attended on time
+- `late`: Student attended after grace period
+- `absent`: Student did not attend (default)
+
+## Default Data
+
+The system automatically creates a default administrator account:
+
+```php config.php:86-92
+$stmt = $pdo->prepare("SELECT * FROM admins WHERE username = 'admin'");
+$stmt->execute();
+if ($stmt->rowCount() == 0) {
+    $admin_password = password_hash('admin123', PASSWORD_DEFAULT);
+    $pdo->exec("INSERT INTO admins (username, password) VALUES ('admin', '$admin_password')");
+}
+```
+
+- **Username:** `admin`
+- **Password:** `admin123`
+
+<Warning>
+Change the default admin password immediately after setup. This account has full system access.
+</Warning>
+
+## PDO Configuration
+
+The system uses PHP Data Objects (PDO) for all database operations:
+
+```php config.php:9-10
+$pdo = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+```
+
+**Benefits:**
+- Prepared statements prevent SQL injection
+- Exception-based error handling
+- Database-agnostic code (portable to other databases)
+- Better performance with statement reuse
+
+## Troubleshooting
+
+### Connection Fails
+
+If you see "Connection failed" errors:
+
+1. Verify MySQL is running
+2. Check database credentials in `config.php`
+3. Ensure the `qr_attendance` database exists
+4. Verify user has proper permissions
+
+### Table Creation Errors
+
+If tables aren't created:
+
+1. Check MySQL user has CREATE TABLE privileges
+2. Review error messages in browser or logs
+3. Manually create tables using the SQL schemas above
+
+### Foreign Key Constraints
+
+If you encounter foreign key errors:
+
+1. Ensure InnoDB engine is used (default for MySQL 5.5+)
+2. Create tables in order: teachers → classes → class_schedules, students → class_students
+3. Verify referenced columns exist and have correct data types

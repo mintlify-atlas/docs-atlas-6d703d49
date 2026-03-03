@@ -1,0 +1,380 @@
+---
+title: Admin Guide
+description: Administrative guide for QR Attendance System management
+---
+
+# Admin guide
+
+This guide covers administrative functions and system maintenance for the QR Attendance System.
+
+## Default admin account
+
+The system automatically creates a default administrator account on first run:
+
+- **Username**: `admin`
+- **Password**: `admin123`
+
+<Warning>
+Change the default admin password immediately after installation. The default credentials are well-known and pose a security risk in production environments.
+</Warning>
+
+## Admin account creation
+
+Admin accounts are created automatically when the database is initialized. From `config.php`:
+
+```php config.php:86-92
+// Insert default admin if not exists
+$stmt = $pdo->prepare("SELECT * FROM admins WHERE username = 'admin'");
+$stmt->execute();
+if ($stmt->rowCount() == 0) {
+    $admin_password = password_hash('admin123', PASSWORD_DEFAULT);
+    $pdo->exec("INSERT INTO admins (username, password) VALUES ('admin', '$admin_password')");
+}
+```
+
+The system checks if the admin account exists and creates it only if missing.
+
+## Changing admin password
+
+Since there's no admin dashboard in the current version, change the password directly in the database:
+
+<Steps>
+  <Step title="Generate password hash">
+    Create a bcrypt hash of your new password using PHP:
+
+    ```php
+    <?php
+    $new_password = 'YourNewSecurePassword123!';
+    echo password_hash($new_password, PASSWORD_DEFAULT);
+    ?>
+    ```
+  </Step>
+
+  <Step title="Update database">
+    Run this SQL query to update the admin password:
+
+    ```sql
+    UPDATE admins 
+    SET password = '$2y$10$your_hashed_password_here' 
+    WHERE username = 'admin';
+    ```
+
+    Replace `$2y$10$your_hashed_password_here` with the hash from step 1.
+  </Step>
+
+  <Step title="Verify">
+    Test the login to ensure the new password works.
+  </Step>
+</Steps>
+
+<Note>
+Passwords are hashed using PHP's `password_hash()` function with `PASSWORD_DEFAULT` (currently bcrypt).
+</Note>
+
+## Database management
+
+### Database schema
+
+The system manages 7 core tables:
+
+1. **students** - Student accounts and QR codes
+2. **teachers** - Teacher accounts
+3. **admins** - Administrator accounts
+4. **classes** - Class definitions
+5. **class_students** - Student-class enrollments
+6. **class_schedules** - Class schedules and timing
+7. **attendance** - Attendance records
+
+See the [database schema documentation](/api/database-schema) for complete details.
+
+### Automatic table creation
+
+All tables are created automatically when the application first runs. The `config.php` file contains `CREATE TABLE IF NOT EXISTS` statements for each table.
+
+### Database backups
+
+Regularly back up your database:
+
+```bash
+# Backup entire database
+mysqldump -u root -p qr_attendance > qr_attendance_backup_$(date +%Y%m%d).sql
+
+# Restore from backup
+mysql -u root -p qr_attendance < qr_attendance_backup_20260303.sql
+```
+
+<Tip>
+Schedule daily automated backups using cron jobs for production systems.
+</Tip>
+
+### Database maintenance
+
+**Optimize tables regularly:**
+
+```sql
+OPTIMIZE TABLE students, teachers, classes, class_students, class_schedules, attendance, admins;
+```
+
+**Check for orphaned records:**
+
+```sql
+-- Find students in class_students but not in students table
+SELECT cs.* 
+FROM class_students cs 
+LEFT JOIN students s ON cs.student_id = s.student_id 
+WHERE s.student_id IS NULL;
+
+-- Find attendance for non-existent students
+SELECT a.* 
+FROM attendance a 
+LEFT JOIN students s ON a.student_id = s.student_id 
+WHERE s.student_id IS NULL;
+```
+
+## User management
+
+### Viewing all users
+
+**Students:**
+```sql
+SELECT student_id, name, email, 
+       (SELECT COUNT(*) FROM attendance WHERE student_id = s.student_id) as attendance_count
+FROM students s
+ORDER BY name;
+```
+
+**Teachers:**
+```sql
+SELECT teacher_id, name, email,
+       (SELECT COUNT(*) FROM classes WHERE teacher_id = t.teacher_id) as class_count
+FROM teachers t
+ORDER BY name;
+```
+
+### Resetting user passwords
+
+Generate a new password hash and update the user's record:
+
+**For students:**
+```sql
+UPDATE students 
+SET password = '$2y$10$your_new_hash_here' 
+WHERE student_id = 'S12345';
+```
+
+**For teachers:**
+```sql
+UPDATE teachers 
+SET password = '$2y$10$your_new_hash_here' 
+WHERE teacher_id = 'T1001';
+```
+
+### Removing users
+
+<Warning>
+Removing users will also delete all related records due to foreign key constraints. Back up data before deletion.
+</Warning>
+
+**Remove student:**
+```sql
+-- This will cascade delete attendance, class enrollments
+DELETE FROM students WHERE student_id = 'S12345';
+```
+
+**Remove teacher:**
+```sql
+-- This will cascade delete classes, which deletes enrollments, schedules, and attendance
+DELETE FROM teachers WHERE teacher_id = 'T1001';
+```
+
+## System monitoring
+
+### Check system health
+
+**Database connection:**
+```php
+<?php
+require_once 'config.php';
+echo "Database connection: OK\n";
+echo "Tables: " . $pdo->query("SHOW TABLES")->rowCount() . "\n";
+?>
+```
+
+**User counts:**
+```sql
+SELECT 
+    (SELECT COUNT(*) FROM students) as total_students,
+    (SELECT COUNT(*) FROM teachers) as total_teachers,
+    (SELECT COUNT(*) FROM classes) as total_classes,
+    (SELECT COUNT(*) FROM attendance WHERE date = CURDATE()) as today_attendance;
+```
+
+**Recent activity:**
+```sql
+-- Recent attendance records
+SELECT a.*, s.name as student_name, c.name as class_name
+FROM attendance a
+JOIN students s ON a.student_id = s.student_id
+JOIN classes c ON a.class_id = c.id
+ORDER BY a.date DESC, a.time DESC
+LIMIT 20;
+```
+
+### Performance monitoring
+
+**Slow query log:**
+Enable MySQL slow query log to identify performance issues:
+
+```sql
+SET GLOBAL slow_query_log = 'ON';
+SET GLOBAL long_query_time = 2;
+SET GLOBAL slow_query_log_file = '/var/log/mysql/slow-query.log';
+```
+
+**Index analysis:**
+```sql
+-- Check if indexes are being used
+EXPLAIN SELECT * FROM attendance WHERE student_id = 'S12345';
+EXPLAIN SELECT * FROM class_students WHERE class_id = 1;
+```
+
+## Security considerations
+
+### Session management
+
+Sessions are started in `config.php`:
+
+```php config.php:2
+session_start();
+```
+
+Ensure session security:
+- Set secure session cookies in production
+- Use HTTPS to prevent session hijacking
+- Configure session timeout in `php.ini`
+
+### Password security
+
+All passwords are hashed using bcrypt:
+- Never store plaintext passwords
+- Use `password_hash()` for new passwords
+- Use `password_verify()` for authentication
+- Default password for imported students is `changeme123` - advise users to change it
+
+### File permissions
+
+Ensure proper permissions:
+
+```bash
+# Application files
+chown -R www-data:www-data /var/www/qr_attendance
+chmod 755 /var/www/qr_attendance
+chmod 644 /var/www/qr_attendance/*.php
+
+# Configuration file
+chmod 600 /var/www/qr_attendance/config.php
+```
+
+### Database security
+
+- Use strong database passwords
+- Grant only necessary privileges to application database user
+- Don't use root account for application connections
+- Enable MySQL audit logging for production
+
+```sql
+-- Create dedicated database user
+CREATE USER 'qr_attendance_app'@'localhost' IDENTIFIED BY 'strong_password';
+GRANT SELECT, INSERT, UPDATE, DELETE ON qr_attendance.* TO 'qr_attendance_app'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+## Troubleshooting
+
+### Application errors
+
+**Enable PHP error reporting:**
+```php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+```
+
+**Check error logs:**
+```bash
+tail -f /var/log/apache2/error.log
+# or
+tail -f /var/log/nginx/error.log
+```
+
+### Database issues
+
+**Connection errors:**
+- Verify MySQL is running: `systemctl status mysql`
+- Check credentials in `config.php`
+- Test connection: `mysql -u root -p qr_attendance`
+
+**Table creation failures:**
+```sql
+-- Check for existing tables
+SHOW TABLES;
+
+-- Manually create tables if needed (copy from config.php)
+```
+
+### Permission issues
+
+```bash
+# Fix ownership
+chown -R www-data:www-data /var/www/qr_attendance
+
+# Fix permissions
+find /var/www/qr_attendance -type d -exec chmod 755 {} \;
+find /var/www/qr_attendance -type f -exec chmod 644 {} \;
+```
+
+## Maintenance tasks
+
+### Regular tasks
+
+<Accordion title="Daily">
+  - Monitor error logs
+  - Check attendance recording is working
+  - Verify backup completion
+</Accordion>
+
+<Accordion title="Weekly">
+  - Review user accounts for suspicious activity
+  - Check database size and growth
+  - Test password reset functionality
+</Accordion>
+
+<Accordion title="Monthly">
+  - Optimize database tables
+  - Review and archive old attendance records
+  - Update application dependencies
+  - Test restore from backup
+</Accordion>
+
+<Accordion title="Quarterly">
+  - Security audit
+  - Review and update admin passwords
+  - Check for application updates
+  - Performance tuning
+</Accordion>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Database Schema" icon="database" href="/api/database-schema">
+    Complete database schema documentation
+  </Card>
+  <Card title="Security Configuration" icon="shield" href="/configuration/security">
+    Security best practices and configuration
+  </Card>
+  <Card title="Database Setup" icon="server" href="/configuration/database-setup">
+    Database configuration guide
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Installation and deployment guide
+  </Card>
+</CardGroup>

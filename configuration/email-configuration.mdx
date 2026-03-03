@@ -1,0 +1,329 @@
+---
+title: 'Email Configuration'
+description: 'Set up email functionality for password reset in the QR Attendance System'
+---
+
+## Overview
+
+The QR Attendance System includes a password reset feature that allows students and teachers to recover their accounts. The current implementation uses a token-based system that can be extended with email functionality.
+
+## Password Reset Flow
+
+The password reset process involves three main components:
+
+<Steps>
+  <Step title="Request password reset">
+    User enters their ID and email on the forgot password page (`forgot_password.php`)
+  </Step>
+  
+  <Step title="Verify and generate token">
+    System verifies credentials and generates a secure reset token (`reset_password.php`)
+  </Step>
+  
+  <Step title="Set new password">
+    User creates a new password using the reset form (`password_reset_form.php` and `update_password.php`)
+  </Step>
+</Steps>
+
+## Forgot Password Form
+
+The forgot password interface collects user credentials to initiate the reset process.
+
+```php forgot_password.php:38-48
+<form method="post" action="reset_password.php">
+    <div class="form-group">
+        <label>User ID</label>
+        <input type="text" name="userID" required placeholder="Enter your user ID">
+    </div>
+    <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" required placeholder="Enter your registered email">
+    </div>
+    <button type="submit" class="btn">Reset Password</button>
+</form>
+```
+
+## Token Generation
+
+### User Verification
+
+The system first verifies the user exists with the provided credentials:
+
+```php reset_password.php:8-27
+// Check if it's a student (numeric ID)
+if (ctype_digit($userID)) {
+    $stmt = $pdo->prepare("SELECT * FROM students WHERE student_id = ? AND email = ?");
+    $stmt->execute([$userID, $email]);
+    $user = $stmt->fetch();
+    $userType = 'student';
+} 
+// Check if it's a teacher (ID starts with T)
+else if (strpos($userID, "T") === 0) {
+    $stmt = $pdo->prepare("SELECT * FROM teachers WHERE teacher_id = ? AND email = ?");
+    $stmt->execute([$userID, $email]);
+    $user = $stmt->fetch();
+    $userType = 'teacher';
+}
+// Invalid ID format
+else {
+    $_SESSION['error'] = "Invalid user ID format.";
+    header("Location: forgot_password.php");
+    exit();
+}
+```
+
+<Note>
+The system automatically detects user type:
+- **Students**: Numeric IDs (e.g., `12345`)
+- **Teachers**: IDs starting with "T" (e.g., `T1234`)
+</Note>
+
+### Secure Token Creation
+
+When credentials are verified, a cryptographically secure token is generated:
+
+```php reset_password.php:30-40
+// Generate a random token
+$token = bin2hex(random_bytes(32));
+$expiry = date('Y-m-d H:i:s', strtotime('+1 hour'));
+
+// Store the reset token in the database
+$tableName = ($userType === 'student') ? 'students' : 'teachers';
+$idField = ($userType === 'student') ? 'student_id' : 'teacher_id';
+
+$stmt = $pdo->prepare("UPDATE $tableName SET reset_token = ?, reset_token_expiry = ? WHERE $idField = ?");
+$stmt->execute([$token, $expiry, $userID]);
+```
+
+**Token Security Features:**
+- 64-character hexadecimal token (256 bits of entropy)
+- 1-hour expiration window
+- Stored securely in database
+- Single-use (cleared after password update)
+
+### Session Storage
+
+The token and user details are stored in the session for the reset form:
+
+```php reset_password.php:43-47
+$_SESSION['reset_token'] = $token;
+$_SESSION['reset_user_id'] = $userID;
+$_SESSION['reset_user_type'] = $userType;
+
+header("Location: password_reset_form.php");
+```
+
+## Password Reset Form
+
+### Session Validation
+
+The reset form validates that a valid reset session exists:
+
+```php password_reset_form.php:4-9
+if (!isset($_SESSION['reset_token']) || !isset($_SESSION['reset_user_id']) || !isset($_SESSION['reset_user_type'])) {
+    $_SESSION['error'] = "Invalid password reset session.";
+    header("Location: forgot_password.php");
+    exit();
+}
+```
+
+### Reset Form Interface
+
+The form includes hidden fields to maintain reset context:
+
+```php password_reset_form.php:45-59
+<form method="post" action="update_password.php">
+    <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
+    <input type="hidden" name="userID" value="<?php echo htmlspecialchars($userID); ?>">
+    <input type="hidden" name="userType" value="<?php echo htmlspecialchars($userType); ?>">
+    
+    <div class="form-group">
+        <label>New Password</label>
+        <input type="password" name="new_password" required placeholder="Enter new password" minlength="8">
+    </div>
+    <div class="form-group">
+        <label>Confirm Password</label>
+        <input type="password" name="confirm_password" required placeholder="Confirm new password" minlength="8">
+    </div>
+    <button type="submit" class="btn">Update Password</button>
+</form>
+```
+
+<Warning>
+All hidden fields use `htmlspecialchars()` to prevent XSS attacks.
+</Warning>
+
+## Password Update Process
+
+### Validation
+
+The update process performs multiple security checks:
+
+```php update_password.php:11-23
+// Validate passwords match
+if ($newPassword !== $confirmPassword) {
+    $_SESSION['error'] = "Passwords do not match.";
+    header("Location: password_reset_form.php");
+    exit();
+}
+
+// Validate password strength
+if (strlen($newPassword) < 8) {
+    $_SESSION['error'] = "Password must be at least 8 characters long.";
+    header("Location: password_reset_form.php");
+    exit();
+}
+```
+
+### Token Verification
+
+The system verifies the token is valid and not expired:
+
+```php update_password.php:29-32
+$stmt = $pdo->prepare("SELECT * FROM $tableName WHERE $idField = ? AND reset_token = ? AND reset_token_expiry > NOW()");
+$stmt->execute([$userID, $token]);
+$user = $stmt->fetch();
+```
+
+<Note>
+The `reset_token_expiry > NOW()` condition ensures expired tokens are rejected automatically.
+</Note>
+
+### Password Update and Cleanup
+
+If the token is valid, the password is updated and reset data is cleared:
+
+```php update_password.php:34-49
+if ($user) {
+    // Hash the new password
+    $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+    
+    // Update the password and clear the reset token
+    $stmt = $pdo->prepare("UPDATE $tableName SET password = ?, reset_token = NULL, reset_token_expiry = NULL WHERE $idField = ?");
+    $stmt->execute([$hashedPassword, $userID]);
+    
+    // Clear the reset session
+    unset($_SESSION['reset_token']);
+    unset($_SESSION['reset_user_id']);
+    unset($_SESSION['reset_user_type']);
+    
+    $_SESSION['success'] = "Your password has been updated successfully. You can now login with your new password.";
+    header("Location: index.php");
+    exit();
+}
+```
+
+## Email Integration
+
+The current implementation uses session-based password reset. To add email functionality:
+
+### Step 1: Install Email Library
+
+Install PHPMailer or use PHP's built-in `mail()` function:
+
+```bash
+composer require phpmailer/phpmailer
+```
+
+### Step 2: Configure SMTP Settings
+
+Add email configuration to `config.php`:
+
+```php
+// Email configuration
+$smtp_host = 'smtp.gmail.com';
+$smtp_port = 587;
+$smtp_username = 'your-email@gmail.com';
+$smtp_password = 'your-app-password';
+$from_email = 'noreply@qr-attendance.com';
+$from_name = 'QR Attendance System';
+```
+
+### Step 3: Send Reset Email
+
+Replace the session redirect in `reset_password.php:42-48` with:
+
+```php
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+require 'vendor/autoload.php';
+
+$mail = new PHPMailer(true);
+
+try {
+    // SMTP configuration
+    $mail->isSMTP();
+    $mail->Host = $smtp_host;
+    $mail->SMTPAuth = true;
+    $mail->Username = $smtp_username;
+    $mail->Password = $smtp_password;
+    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+    $mail->Port = $smtp_port;
+    
+    // Email content
+    $mail->setFrom($from_email, $from_name);
+    $mail->addAddress($email);
+    $mail->Subject = 'Password Reset Request';
+    
+    $reset_link = "https://yourdomain.com/password_reset_form.php?token=$token&user=$userID&type=$userType";
+    
+    $mail->isHTML(true);
+    $mail->Body = "
+        <h2>Password Reset Request</h2>
+        <p>Click the link below to reset your password:</p>
+        <a href='$reset_link'>Reset Password</a>
+        <p>This link will expire in 1 hour.</p>
+        <p>If you didn't request this, please ignore this email.</p>
+    ";
+    
+    $mail->send();
+    $_SESSION['success'] = "Password reset link sent to your email.";
+} catch (Exception $e) {
+    $_SESSION['error'] = "Failed to send email: {$mail->ErrorInfo}";
+}
+```
+
+### Step 4: Update Reset Form
+
+Modify `password_reset_form.php` to accept token from URL parameters:
+
+```php
+$token = $_GET['token'] ?? $_SESSION['reset_token'] ?? null;
+$userID = $_GET['user'] ?? $_SESSION['reset_user_id'] ?? null;
+$userType = $_GET['type'] ?? $_SESSION['reset_user_type'] ?? null;
+```
+
+<Warning>
+Always validate URL parameters to prevent token manipulation attacks.
+</Warning>
+
+## Security Best Practices
+
+1. **Use HTTPS**: Always send reset emails over encrypted connections
+2. **Rate Limiting**: Implement request throttling to prevent abuse
+3. **Email Verification**: Verify email addresses during registration
+4. **Audit Logging**: Log all password reset attempts
+5. **Token Cleanup**: Periodically delete expired tokens from the database
+
+## Testing Password Reset
+
+To test the current implementation:
+
+<Steps>
+  <Step title="Create a test account">
+    Register as a student or teacher
+  </Step>
+  
+  <Step title="Access forgot password">
+    Go to `forgot_password.php` and enter your ID and email
+  </Step>
+  
+  <Step title="Reset password">
+    You'll be redirected to the password reset form. Enter a new password.
+  </Step>
+  
+  <Step title="Login">
+    Return to the login page and authenticate with your new password
+  </Step>
+</Steps>

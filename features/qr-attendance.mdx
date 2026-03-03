@@ -1,0 +1,255 @@
+---
+title: 'QR Code Attendance'
+description: 'Learn how QR codes are generated, scanned, and processed for attendance tracking'
+---
+
+## Overview
+
+The QR Attendance System uses QR codes to enable quick and contactless attendance marking. Students generate unique QR codes containing their student ID, and teachers scan these codes to automatically record attendance with timestamp and status.
+
+## QR Code Generation
+
+Each student is assigned a unique QR code that encodes their student ID. The system uses the QRCode.js library to generate these codes dynamically on the student dashboard.
+
+### Student QR Code Display
+
+When students log in, their QR code is automatically generated using their student ID:
+
+```javascript student_dashboard.php:314-318
+new QRCode(document.getElementById("qrcode"), {
+    text: "<?php echo $student['student_id']; ?>",
+    width: 128,
+    height: 128
+});
+```
+
+<Info>
+The QR code contains only the student ID as plain text. This ensures compatibility with any QR code scanner and keeps the implementation simple and reliable.
+</Info>
+
+### QR Code Properties
+
+<CardGroup cols={2}>
+  <Card title="Size" icon="expand">
+    128x128 pixels - optimized for mobile scanning
+  </Card>
+  <Card title="Content" icon="barcode">
+    Student ID in plain text format
+  </Card>
+  <Card title="Library" icon="code">
+    QRCode.js (CDN-hosted)
+  </Card>
+  <Card title="Regeneration" icon="rotate">
+    Generated fresh on each page load
+  </Card>
+</CardGroup>
+
+## Scanning Process
+
+Teachers use the built-in QR scanner to capture student attendance. The scanner uses the Instascan library to access the device camera and decode QR codes in real-time.
+
+### Scanner Implementation
+
+The scanner page initializes a video preview and listens for QR code scans:
+
+```javascript scanner.php:42-62
+let scanner = new Instascan.Scanner({ video: document.getElementById('preview') });
+
+scanner.addListener('scan', function (content) {
+    document.getElementById('result').innerHTML = 'Scanning...';
+    
+    // Send to process_attendance.php
+    fetch('process_attendance.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'qr_data=' + encodeURIComponent(content)
+    })
+    .then(response => response.text())
+    .then(data => {
+        document.getElementById('result').innerHTML = data;
+    })
+    .catch(error => {
+        document.getElementById('result').innerHTML = 'Error: ' + error;
+    });
+});
+```
+
+### Camera Selection
+
+The system automatically selects the first available camera:
+
+```javascript scanner.php:65-76
+Instascan.Camera.getCameras().then(function (cameras) {
+    if (cameras.length > 0) {
+        scanner.start(cameras[0]); // Use first available camera
+    } else {
+        console.error('No cameras found.');
+        document.getElementById('result').innerHTML = 'Error: No cameras found.';
+    }
+}).catch(function (e) {
+    console.error(e);
+    document.getElementById('result').innerHTML = 'Error accessing camera: ' + e;
+});
+```
+
+<Warning>
+The scanner requires camera permissions. Users must grant camera access when prompted by the browser.
+</Warning>
+
+## Attendance Processing
+
+When a QR code is scanned, the system validates the student, checks the schedule, and determines the attendance status based on the current time.
+
+### Validation Flow
+
+1. **Teacher Authorization** - Verify the teacher is logged in
+2. **Student Verification** - Check if student exists and is enrolled in teacher's class
+3. **Schedule Check** - Confirm there's a class scheduled for today
+4. **Duplicate Check** - Ensure attendance hasn't already been marked
+5. **Status Calculation** - Determine if on-time or late
+6. **Record Creation** - Insert attendance record into database
+
+### Student Validation
+
+```php process_attendance.php:16-28
+// Check if student exists and get their classes
+$stmt = $pdo->prepare("
+    SELECT cs.class_id, s.* 
+    FROM students s
+    JOIN class_students cs ON s.student_id = cs.student_id 
+    JOIN classes c ON cs.class_id = c.id
+    WHERE s.student_id = ? AND c.teacher_id = ?
+");
+$stmt->execute([$student_id, $teacher_id]);
+
+if ($stmt->rowCount() > 0) {
+    $student = $stmt->fetch();
+    // Continue processing...
+}
+```
+
+### Schedule Verification
+
+```php process_attendance.php:30-44
+// Get today's schedule
+$scheduleStmt = $pdo->prepare("
+    SELECT cs.* 
+    FROM class_schedules cs
+    JOIN classes c ON cs.class_id = c.id
+    WHERE c.teacher_id = ? 
+    AND cs.class_id = ?
+    AND cs.day_of_week = DAYOFWEEK(CURRENT_DATE())
+");
+$scheduleStmt->execute([$teacher_id, $student['class_id']]);
+$schedule = $scheduleStmt->fetch();
+
+if (!$schedule) {
+    echo "❌ No class scheduled for today with this teacher";
+    exit;
+}
+```
+
+## On-Time vs Late Detection
+
+The system automatically determines whether a student is on-time or late by comparing the scan time against the class start time plus the grace period.
+
+### Time Calculation
+
+```php process_attendance.php:56-63
+// Get current time
+$currentTime = new DateTime();
+$startTime = new DateTime($schedule['start_time']);
+$graceTime = clone $startTime;
+$graceTime->modify('+' . $schedule['grace_period'] . ' minutes');
+
+// Determine status based on time
+$status = $currentTime <= $graceTime ? 'on-time' : 'late';
+```
+
+### Status Logic
+
+<CardGroup cols={2}>
+  <Card title="On-Time" icon="check" color="#22c55e">
+    Scanned within the start time + grace period
+  </Card>
+  <Card title="Late" icon="clock" color="#f59e0b">
+    Scanned after the grace period has expired
+  </Card>
+</CardGroup>
+
+### Recording Attendance
+
+```php process_attendance.php:66-75
+// Mark attendance
+$stmt = $pdo->prepare("
+    INSERT INTO attendance (student_id, class_id, date, time, status) 
+    VALUES (?, ?, CURRENT_DATE(), CURRENT_TIME(), ?)
+");
+
+$stmt->execute([$student_id, $student['class_id'], $status]);
+
+echo $status === 'on-time' ? 
+    "✅ On-time attendance marked for Student ID: $student_id" :
+    "⚠️ Late attendance marked for Student ID: $student_id";
+```
+
+## Response Messages
+
+The system provides clear feedback messages for different scenarios:
+
+| Scenario | Message | Icon |
+|----------|---------|------|
+| On-time attendance | "On-time attendance marked for Student ID: {id}" | ✅ |
+| Late attendance | "Late attendance marked for Student ID: {id}" | ⚠️ |
+| Already marked | "Attendance already marked for this class today" | ⚠️ |
+| Student not found | "Student not found in any of your classes" | ❌ |
+| No schedule | "No class scheduled for today with this teacher" | ❌ |
+| Unauthorized | "Unauthorized access" | ❌ |
+
+<Info>
+All responses are displayed immediately in the scanner interface, providing instant feedback to both teacher and student.
+</Info>
+
+## Security Considerations
+
+### Teacher Authorization
+
+Only logged-in teachers can process attendance:
+
+```php process_attendance.php:7-11
+if (!isset($_SESSION['user_type']) || $_SESSION['user_type'] !== 'teacher' || !isset($_SESSION['teacher_id'])) {
+    echo "❌ Unauthorized access";
+    exit;
+}
+```
+
+### Class Ownership Validation
+
+Teachers can only mark attendance for students in their own classes:
+
+```php process_attendance.php:22
+WHERE s.student_id = ? AND c.teacher_id = ?
+```
+
+<Warning>
+The system enforces strict authorization checks to prevent unauthorized attendance marking across different teachers' classes.
+</Warning>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="QR Code Display" icon="mobile">
+    Students should have their QR code ready before class to speed up the scanning process
+  </Card>
+  <Card title="Camera Positioning" icon="camera">
+    Hold the device steady and ensure good lighting for optimal scanning
+  </Card>
+  <Card title="Grace Period" icon="clock">
+    Configure appropriate grace periods (typically 5-15 minutes) to account for minor delays
+  </Card>
+  <Card title="Duplicate Prevention" icon="shield">
+    The system automatically prevents duplicate scans for the same class and date
+  </Card>
+</CardGroup>

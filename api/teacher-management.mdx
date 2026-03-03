@@ -1,0 +1,485 @@
+---
+title: 'Teacher Management'
+description: 'Teacher registration, profile management, and class ownership'
+icon: 'chalkboard-user'
+---
+
+Manage teacher accounts, profiles, and access to class management features.
+
+## Teacher Registration
+
+**Endpoint:** `register.php`
+
+**Method:** POST
+
+**Description:** Creates a new teacher account with a unique teacher ID.
+
+### Request Parameters
+
+<ParamField body="user_type" type="string" required>
+  Must be set to `teacher`
+</ParamField>
+
+<ParamField body="teacher_id" type="string" required>
+  Teacher identifier in format `T\d{4}` (e.g., T1234, T5678)
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Teacher's full name
+</ParamField>
+
+<ParamField body="email" type="email" required>
+  Valid email address for account management
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Account password (minimum 8 characters)
+</ParamField>
+
+<ParamField body="confirm_password" type="string" required>
+  Password confirmation (must match password)
+</ParamField>
+
+### Teacher ID Format
+
+**Pattern:** `^T\d{4}$`
+
+**Valid Examples:**
+- T0001
+- T1234
+- T9999
+
+**Invalid Examples:**
+- 1234 (missing 'T' prefix)
+- T123 (only 3 digits)
+- T12345 (too many digits)
+- t1234 (lowercase)
+
+### Validation Process
+
+1. **Password Match:**
+   ```php
+   if ($password !== $confirm_password) {
+       echo "Passwords do not match";
+   }
+   ```
+
+2. **Teacher ID Format:**
+   ```php
+   if (!preg_match('/^T\d{4}$/', $teacher_id)) {
+       echo "Teacher ID must be in format T followed by 4 digits (e.g., T1234)";
+   }
+   ```
+
+3. **Uniqueness Check:**
+   ```sql
+   SELECT COUNT(*) FROM teachers WHERE teacher_id = ?
+   ```
+
+### Database Insertion
+
+```sql
+INSERT INTO teachers (teacher_id, name, email, password) 
+VALUES (?, ?, ?, ?)
+```
+
+**Password Hashing:**
+```php
+$hashed_password = password_hash($password, PASSWORD_DEFAULT);
+```
+
+### Response Messages
+
+**Success:**
+```html
+<div class="success-message">Teacher registration successful! You can now login.</div>
+```
+
+**Errors:**
+- "Passwords do not match"
+- "Teacher ID must be in format T followed by 4 digits (e.g., T1234)"
+- "Teacher ID already exists"
+- "Registration failed: [database error]"
+
+<Warning>
+  Teacher IDs must be unique across the entire system. Each teacher must have a distinct ID starting with 'T'.
+</Warning>
+
+---
+
+## Teacher Profile Management
+
+**Page:** `teacher_dashboard.php`
+
+**Authentication:** Required (teacher session)
+
+### View Profile Information
+
+**Session Data:**
+```php
+$_SESSION['teacher_id']    // e.g., "T1234"
+$_SESSION['teacher_name']  // e.g., "John Smith"
+$_SESSION['user_type']     // "teacher"
+```
+
+**Database Query:**
+```sql
+SELECT email FROM teachers WHERE teacher_id = ?
+```
+
+### Response Fields
+
+<ResponseField name="teacher_id" type="string">
+  Unique teacher identifier (format: T\d{4})
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Teacher's full name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Registered email address
+</ResponseField>
+
+---
+
+## Update Email Address
+
+**Endpoint:** `update_email.php`
+
+**Method:** POST
+
+**Authentication:** Teacher session required
+
+### Request Parameters
+
+<ParamField body="new_email" type="email" required>
+  New email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Current password for verification
+</ParamField>
+
+### Validation Process
+
+1. **Password Verification:**
+   ```php
+   $stmt = $pdo->prepare("SELECT password FROM teachers WHERE teacher_id = ?");
+   $stmt->execute([$teacher_id]);
+   $teacher = $stmt->fetch();
+   
+   if (!password_verify($password, $teacher['password'])) {
+       // Error: incorrect password
+   }
+   ```
+
+2. **Email Uniqueness:**
+   ```sql
+   SELECT COUNT(*) FROM teachers 
+   WHERE email = ? AND teacher_id != ?
+   ```
+
+3. **Update Database:**
+   ```sql
+   UPDATE teachers SET email = ? WHERE teacher_id = ?
+   ```
+
+### Response Messages
+
+**Success:**
+```html
+<div class="message success">Email updated successfully</div>
+```
+
+**Errors:**
+- "Email already in use by another account"
+- "Incorrect password"
+
+---
+
+## Change Password
+
+**Endpoint:** `update_password.php`
+
+**Method:** POST
+
+**Authentication:** Teacher session required
+
+### Request Parameters
+
+<ParamField body="current_password" type="string" required>
+  Current account password
+</ParamField>
+
+<ParamField body="new_password" type="string" required>
+  New password (minimum 8 characters)
+</ParamField>
+
+<ParamField body="confirm_password" type="string" required>
+  Must match new_password
+</ParamField>
+
+### Validation Steps
+
+1. **Password Match:**
+   ```php
+   if ($new_password !== $confirm_password) {
+       $_SESSION['error'] = "Passwords do not match";
+   }
+   ```
+
+2. **Current Password Verification:**
+   ```php
+   $stmt = $pdo->prepare("SELECT password FROM teachers WHERE teacher_id = ?");
+   $stmt->execute([$teacher_id]);
+   $teacher = $stmt->fetch();
+   
+   if (!password_verify($current_password, $teacher['password'])) {
+       $_SESSION['error'] = "Current password is incorrect";
+   }
+   ```
+
+3. **Update Password:**
+   ```php
+   $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+   $stmt = $pdo->prepare("UPDATE teachers SET password = ? WHERE teacher_id = ?");
+   $stmt->execute([$hashed_password, $teacher_id]);
+   ```
+
+### Response Messages
+
+**Success:**
+```html
+<div class="message success">Password updated successfully</div>
+```
+
+**Errors:**
+- "Passwords do not match"
+- "Current password is incorrect"
+- "Password must be at least 8 characters long"
+
+<Note>
+  Password changes require verification of the current password to prevent unauthorized modifications.
+</Note>
+
+---
+
+## View Teacher's Classes
+
+**Query:** Retrieve all classes owned by the teacher
+
+```sql
+SELECT * FROM classes 
+WHERE teacher_id = ? 
+ORDER BY name
+```
+
+### Response Fields
+
+<ResponseField name="id" type="integer">
+  Unique class identifier
+</ResponseField>
+
+<ResponseField name="teacher_id" type="string">
+  Owner teacher's ID
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Class name
+</ResponseField>
+
+### Usage
+
+Displayed in teacher dashboard for class selection:
+```html
+<select class="class-select" onchange="window.location.href='?class_id=' + this.value">
+    <option value="">Select a class</option>
+    <?php foreach ($classes as $class): ?>
+        <option value="<?= $class['id'] ?>">
+            <?= $class['name'] ?>
+        </option>
+    <?php endforeach; ?>
+</select>
+```
+
+---
+
+## Class Ownership Verification
+
+**Purpose:** Ensure teachers can only access their own classes
+
+### Verification Query
+
+```sql
+SELECT id FROM classes 
+WHERE id = ? AND teacher_id = ?
+```
+
+**Parameters:**
+- `?` - Class ID being accessed
+- `?` - Logged-in teacher's ID
+
+### Implementation
+
+```php
+if ($selected_class) {
+    $verify_class = $pdo->prepare(
+        "SELECT id FROM classes WHERE id = ? AND teacher_id = ?"
+    );
+    $verify_class->execute([$selected_class, $teacher_id]);
+    
+    if ($verify_class->rowCount() === 0) {
+        $_SESSION['error'] = "You don't have permission to view this class";
+        $selected_class = null;
+    }
+}
+```
+
+<Warning>
+  All class-related operations must verify ownership before allowing access or modifications.
+</Warning>
+
+---
+
+## View Class Statistics
+
+**Queries:** Get attendance metrics for a specific class
+
+### Total Students in Class
+
+```sql
+SELECT COUNT(*) FROM class_students 
+WHERE class_id = ?
+```
+
+### Present Today
+
+```sql
+SELECT COUNT(DISTINCT a.student_id) 
+FROM attendance a 
+WHERE a.class_id = ? AND a.date = CURRENT_DATE()
+```
+
+### Attendance Rate Calculation
+
+```php
+$attendance_rate = $student_count > 0 
+    ? round(($attendance_count / $student_count) * 100) 
+    : 0;
+```
+
+### Response Fields
+
+<ResponseField name="student_count" type="integer">
+  Total number of students enrolled in the class
+</ResponseField>
+
+<ResponseField name="attendance_count" type="integer">
+  Number of students present today
+</ResponseField>
+
+<ResponseField name="attendance_rate" type="integer">
+  Percentage of students present (0-100)
+</ResponseField>
+
+---
+
+## View Today's Attendance
+
+**Query:** Get attendance records for all students in class
+
+```sql
+SELECT 
+    cs.student_id,
+    s.name,
+    a.id as attendance_id,
+    a.time,
+    COALESCE(a.status, 'absent') as status
+FROM class_students cs
+JOIN students s ON cs.student_id = s.student_id
+LEFT JOIN attendance a ON cs.student_id = a.student_id 
+    AND a.class_id = cs.class_id 
+    AND a.date = CURRENT_DATE()
+WHERE cs.class_id = ?
+ORDER BY s.name
+```
+
+### Response Fields
+
+<ResponseField name="student_id" type="string">
+  Student identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Student's full name
+</ResponseField>
+
+<ResponseField name="attendance_id" type="integer">
+  Attendance record ID (null if absent)
+</ResponseField>
+
+<ResponseField name="time" type="time">
+  Check-in time (null if absent)
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Attendance status: `on-time`, `late`, or `absent`
+</ResponseField>
+
+---
+
+## Update Attendance Status
+
+**Endpoint:** `teacher_dashboard.php`
+
+**Method:** POST
+
+**Description:** Allows teachers to manually modify attendance status
+
+### Request Parameters
+
+<ParamField body="update_status" type="string" required>
+  Action identifier (set to "1")
+</ParamField>
+
+<ParamField body="attendance_id" type="integer" required>
+  ID of the attendance record to update
+</ParamField>
+
+<ParamField body="new_status" type="string" required>
+  New status: `on-time`, `late`, or `absent`
+</ParamField>
+
+### Verification Process
+
+1. **Ownership Check:**
+   ```sql
+   SELECT a.id 
+   FROM attendance a
+   JOIN classes c ON a.class_id = c.id
+   WHERE a.id = ? AND c.teacher_id = ?
+   ```
+
+2. **Update Status:**
+   ```sql
+   UPDATE attendance 
+   SET status = ? 
+   WHERE id = ?
+   ```
+
+### Response Messages
+
+**Success:**
+```php
+$_SESSION['success'] = "Attendance status updated successfully";
+```
+
+**Error:**
+```php
+$_SESSION['error'] = "You don't have permission to modify this attendance record";
+```
+
+<Note>
+  Teachers can only modify attendance records for classes they own. The system verifies ownership before allowing any updates.
+</Note>

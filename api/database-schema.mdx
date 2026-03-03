@@ -1,0 +1,392 @@
+---
+title: Database Schema
+description: Complete database schema documentation for the QR Attendance System
+---
+
+## Overview
+
+The QR Attendance System uses a MySQL database named `qr_attendance` with 7 interconnected tables that manage users, classes, schedules, and attendance records.
+
+## Entity Relationship Overview
+
+The database schema follows a relational structure with the following key relationships:
+
+- **Teachers** create and manage **Classes**
+- **Students** can be enrolled in multiple **Classes** through **Class Students** (many-to-many)
+- **Classes** have scheduled meeting times via **Class Schedules**
+- **Attendance** records track student presence in specific classes
+- **Admins** have system-wide administrative privileges
+
+## Tables
+
+### Students Table
+
+<Accordion title="students">
+
+Stores student account information and QR codes for attendance scanning.
+
+```sql
+CREATE TABLE IF NOT EXISTS students (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id VARCHAR(20) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    qr_code TEXT NOT NULL,
+    reset_token VARCHAR(64) NULL,
+    reset_token_expiry DATETIME NULL
+);
+```
+
+#### Fields
+
+<ResponseField name="id" type="INT" required>
+  Primary key, auto-incrementing unique identifier
+</ResponseField>
+
+<ResponseField name="student_id" type="VARCHAR(20)" required>
+  Unique student identifier (e.g., student number or ID card number)
+</ResponseField>
+
+<ResponseField name="name" type="VARCHAR(100)" required>
+  Full name of the student
+</ResponseField>
+
+<ResponseField name="email" type="VARCHAR(100)" required>
+  Unique email address for login and communication
+</ResponseField>
+
+<ResponseField name="password" type="VARCHAR(255)" required>
+  Hashed password for authentication
+</ResponseField>
+
+<ResponseField name="qr_code" type="TEXT" required>
+  Encoded QR code data for attendance scanning
+</ResponseField>
+
+<ResponseField name="reset_token" type="VARCHAR(64)">
+  Token for password reset functionality (nullable)
+</ResponseField>
+
+<ResponseField name="reset_token_expiry" type="DATETIME">
+  Expiration timestamp for the reset token (nullable)
+</ResponseField>
+
+#### Constraints
+- **Primary Key**: `id`
+- **Unique Keys**: `student_id`, `email`
+- **Indexes**: Automatic indexes on unique fields
+
+</Accordion>
+
+### Teachers Table
+
+<Accordion title="teachers">
+
+Stores teacher account information and credentials.
+
+```sql
+CREATE TABLE IF NOT EXISTS teachers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    teacher_id VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    reset_token VARCHAR(64) NULL,
+    reset_token_expiry DATETIME NULL
+);
+```
+
+#### Fields
+
+<ResponseField name="id" type="INT" required>
+  Primary key, auto-incrementing unique identifier
+</ResponseField>
+
+<ResponseField name="teacher_id" type="VARCHAR(50)" required>
+  Unique teacher identifier used for referencing in classes
+</ResponseField>
+
+<ResponseField name="name" type="VARCHAR(100)" required>
+  Full name of the teacher
+</ResponseField>
+
+<ResponseField name="email" type="VARCHAR(100)" required>
+  Email address for login and communication
+</ResponseField>
+
+<ResponseField name="password" type="VARCHAR(255)" required>
+  Hashed password for authentication
+</ResponseField>
+
+<ResponseField name="reset_token" type="VARCHAR(64)">
+  Token for password reset functionality (nullable)
+</ResponseField>
+
+<ResponseField name="reset_token_expiry" type="DATETIME">
+  Expiration timestamp for the reset token (nullable)
+</ResponseField>
+
+#### Constraints
+- **Primary Key**: `id`
+- **Unique Key**: `teacher_id`
+- **Referenced By**: `classes.teacher_id`
+
+</Accordion>
+
+### Admins Table
+
+<Accordion title="admins">
+
+Stores administrator credentials for system management.
+
+```sql
+CREATE TABLE IF NOT EXISTS admins (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL
+);
+```
+
+#### Fields
+
+<ResponseField name="id" type="INT" required>
+  Primary key, auto-incrementing unique identifier
+</ResponseField>
+
+<ResponseField name="username" type="VARCHAR(50)" required>
+  Unique username for admin login
+</ResponseField>
+
+<ResponseField name="password" type="VARCHAR(255)" required>
+  Hashed password for authentication
+</ResponseField>
+
+#### Constraints
+- **Primary Key**: `id`
+- **Unique Key**: `username`
+
+#### Default Data
+The system automatically creates a default admin account:
+- **Username**: `admin`
+- **Password**: `admin123` (hashed)
+
+</Accordion>
+
+### Classes Table
+
+<Accordion title="classes">
+
+Stores class/course information managed by teachers.
+
+```sql
+CREATE TABLE IF NOT EXISTS classes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    teacher_id VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id)
+);
+```
+
+#### Fields
+
+<ResponseField name="id" type="INT" required>
+  Primary key, auto-incrementing unique identifier
+</ResponseField>
+
+<ResponseField name="teacher_id" type="VARCHAR(50)" required>
+  Reference to the teacher who manages this class
+</ResponseField>
+
+<ResponseField name="name" type="VARCHAR(100)" required>
+  Name or title of the class/course
+</ResponseField>
+
+#### Constraints
+- **Primary Key**: `id`
+- **Foreign Key**: `teacher_id` references `teachers(teacher_id)`
+- **Referenced By**: `class_students.class_id`, `class_schedules.class_id`, `attendance.class_id`
+
+</Accordion>
+
+### Class Students Table
+
+<Accordion title="class_students">
+
+Junction table managing the many-to-many relationship between students and classes.
+
+```sql
+CREATE TABLE IF NOT EXISTS class_students (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    student_id VARCHAR(50) NOT NULL,
+    FOREIGN KEY (class_id) REFERENCES classes(id),
+    FOREIGN KEY (student_id) REFERENCES students(student_id)
+);
+```
+
+#### Fields
+
+<ResponseField name="id" type="INT" required>
+  Primary key, auto-incrementing unique identifier
+</ResponseField>
+
+<ResponseField name="class_id" type="INT" required>
+  Reference to the class
+</ResponseField>
+
+<ResponseField name="student_id" type="VARCHAR(50)" required>
+  Reference to the enrolled student
+</ResponseField>
+
+#### Constraints
+- **Primary Key**: `id`
+- **Foreign Keys**: 
+  - `class_id` references `classes(id)`
+  - `student_id` references `students(student_id)`
+
+</Accordion>
+
+### Class Schedules Table
+
+<Accordion title="class_schedules">
+
+Defines the weekly schedule for each class, including meeting times and grace periods.
+
+```sql
+CREATE TABLE IF NOT EXISTS class_schedules (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    day_of_week INT NOT NULL,
+    start_time TIME NOT NULL,
+    grace_period INT NOT NULL DEFAULT 15,
+    UNIQUE KEY unique_class_day (class_id, day_of_week),
+    FOREIGN KEY (class_id) REFERENCES classes(id)
+);
+```
+
+#### Fields
+
+<ResponseField name="id" type="INT" required>
+  Primary key, auto-incrementing unique identifier
+</ResponseField>
+
+<ResponseField name="class_id" type="INT" required>
+  Reference to the class being scheduled
+</ResponseField>
+
+<ResponseField name="day_of_week" type="INT" required>
+  Day of the week (typically 0-6 or 1-7, depending on implementation)
+</ResponseField>
+
+<ResponseField name="start_time" type="TIME" required>
+  Start time of the class session
+</ResponseField>
+
+<ResponseField name="grace_period" type="INT" default="15">
+  Grace period in minutes for late arrivals (default: 15 minutes)
+</ResponseField>
+
+#### Constraints
+- **Primary Key**: `id`
+- **Unique Key**: `unique_class_day` on (`class_id`, `day_of_week`) - prevents duplicate schedules for the same class on the same day
+- **Foreign Key**: `class_id` references `classes(id)`
+
+</Accordion>
+
+### Attendance Table
+
+<Accordion title="attendance">
+
+Records student attendance for specific classes on specific dates.
+
+```sql
+CREATE TABLE IF NOT EXISTS attendance (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id VARCHAR(50) NOT NULL,
+    class_id INT NOT NULL,
+    date DATE NOT NULL,
+    time TIME NOT NULL,
+    status VARCHAR(10) DEFAULT 'absent',
+    FOREIGN KEY (student_id) REFERENCES students(student_id),
+    FOREIGN KEY (class_id) REFERENCES classes(id)
+);
+```
+
+#### Fields
+
+<ResponseField name="id" type="INT" required>
+  Primary key, auto-incrementing unique identifier
+</ResponseField>
+
+<ResponseField name="student_id" type="VARCHAR(50)" required>
+  Reference to the student being marked
+</ResponseField>
+
+<ResponseField name="class_id" type="INT" required>
+  Reference to the class session
+</ResponseField>
+
+<ResponseField name="date" type="DATE" required>
+  Date of the attendance record
+</ResponseField>
+
+<ResponseField name="time" type="TIME" required>
+  Time when attendance was recorded
+</ResponseField>
+
+<ResponseField name="status" type="VARCHAR(10)" default="absent">
+  Attendance status (e.g., 'present', 'absent', 'late')
+</ResponseField>
+
+#### Constraints
+- **Primary Key**: `id`
+- **Foreign Keys**:
+  - `student_id` references `students(student_id)`
+  - `class_id` references `classes(id)`
+
+</Accordion>
+
+## Database Relationships
+
+### One-to-Many Relationships
+
+| Parent Table | Child Table | Relationship |
+|--------------|-------------|-------------|
+| `teachers` | `classes` | One teacher can manage multiple classes |
+| `classes` | `class_students` | One class can have multiple student enrollments |
+| `classes` | `class_schedules` | One class can have multiple scheduled sessions |
+| `classes` | `attendance` | One class can have multiple attendance records |
+| `students` | `class_students` | One student can enroll in multiple classes |
+| `students` | `attendance` | One student can have multiple attendance records |
+
+### Many-to-Many Relationships
+
+| Table 1 | Junction Table | Table 2 | Description |
+|---------|---------------|---------|-------------|
+| `students` | `class_students` | `classes` | Students can enroll in multiple classes; classes can have multiple students |
+
+## Connection Configuration
+
+The database connection is configured in `config.php`:
+
+```php
+$host = 'localhost';
+$dbname = 'qr_attendance';
+$username = 'root';
+$password = '';
+```
+
+## Initialization
+
+All tables are created automatically when `config.php` is first loaded. The schema includes:
+
+- Auto-increment primary keys on all tables
+- Foreign key constraints for referential integrity
+- Unique constraints to prevent duplicate entries
+- Default values for optional fields
+- Automatic creation of a default admin account
+
+<Note>
+Password reset functionality is supported for both students and teachers through the `reset_token` and `reset_token_expiry` columns.
+</Note>

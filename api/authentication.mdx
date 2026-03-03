@@ -1,0 +1,365 @@
+---
+title: 'Authentication'
+description: 'Login, registration, logout, and password reset endpoints'
+icon: 'key'
+---
+
+The QR Attendance System uses session-based authentication to manage user access. Users can be either students or teachers, each with distinct authentication flows.
+
+## Login Process
+
+**Endpoint:** `login_process.php`
+
+**Method:** POST
+
+**Description:** Authenticates users based on their ID format. Student IDs are numeric, while teacher IDs start with 'T' followed by 4 digits.
+
+### Request Parameters
+
+<ParamField body="userID" type="string" required>
+  User identifier. Can be:
+  - Numeric student ID (e.g., `12345`)
+  - Teacher ID starting with T (e.g., `T1234`)
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User's password (minimum 8 characters)
+</ParamField>
+
+### Authentication Flow
+
+1. **Student Authentication** (numeric ID):
+   - Queries `students` table using `student_id`
+   - Verifies password using `password_verify()`
+   - Sets session variables: `user_id`, `user_type`, `student_id`
+   - Redirects to `student_dashboard.php`
+
+2. **Teacher Authentication** (ID starts with 'T'):
+   - Queries `teachers` table using `teacher_id`
+   - Verifies password using `password_verify()`
+   - Sets session variables: `user_id`, `user_type`, `teacher_id`, `teacher_name`
+   - Redirects to `teacher_dashboard.php`
+
+### Response Handling
+
+**Success:**
+- Redirects to appropriate dashboard
+- Session variables set for authenticated user
+
+**Error:**
+- Sets `$_SESSION['error']` with descriptive message
+- Redirects back to `index.php`
+- Error messages:
+  - "Invalid student ID or password. Please check your credentials and try again."
+  - "Invalid teacher ID or password. Please check your credentials and try again."
+
+```php
+// Example successful student login
+$_SESSION['user_id'] = 1;
+$_SESSION['user_type'] = 'student';
+$_SESSION['student_id'] = '12345';
+```
+
+<Note>
+  All passwords are hashed using PHP's `PASSWORD_DEFAULT` algorithm (bcrypt) for security.
+</Note>
+
+---
+
+## Registration
+
+**Endpoint:** `register.php`
+
+**Method:** POST
+
+**Description:** Handles user registration for both students and teachers with different validation rules.
+
+### Student Registration
+
+<ParamField body="user_type" type="string" required>
+  Must be set to `student`
+</ParamField>
+
+<ParamField body="student_id" type="string" required>
+  Unique student identifier (numeric)
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Student's full name
+</ParamField>
+
+<ParamField body="email" type="email" required>
+  Valid email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Password (minimum 8 characters)
+</ParamField>
+
+<ParamField body="confirm_password" type="string" required>
+  Must match the password field
+</ParamField>
+
+### Teacher Registration
+
+<ParamField body="user_type" type="string" required>
+  Must be set to `teacher`
+</ParamField>
+
+<ParamField body="teacher_id" type="string" required>
+  Teacher ID in format `T\d{4}` (e.g., T1234)
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Teacher's full name
+</ParamField>
+
+<ParamField body="email" type="email" required>
+  Valid email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Password (minimum 8 characters)
+</ParamField>
+
+<ParamField body="confirm_password" type="string" required>
+  Must match the password field
+</ParamField>
+
+### Validation Rules
+
+**Student ID:**
+- Must be unique in the `students` table
+- Can be any numeric format
+
+**Teacher ID:**
+- Must match pattern: `^T\d{4}$`
+- Must be unique in the `teachers` table
+- Examples: T1234, T5678, T0001
+
+**Password:**
+- Minimum 8 characters
+- Must match confirmation password
+- Automatically hashed using `password_hash($password, PASSWORD_DEFAULT)`
+
+### Response Messages
+
+**Success (Student):**
+```html
+<div class="success-message">Student registration successful! Your QR code is ready.</div>
+```
+- Generates QR code containing the student ID
+- QR code displayed on page for immediate download
+
+**Success (Teacher):**
+```html
+<div class="success-message">Teacher registration successful! You can now login.</div>
+```
+
+**Errors:**
+- "Passwords do not match"
+- "Student ID already exists"
+- "Teacher ID already exists"
+- "Teacher ID must be in format T followed by 4 digits (e.g., T1234)"
+- "Registration failed: [database error]"
+
+### Database Operations
+
+```php
+// Student insertion
+INSERT INTO students (student_id, name, email, password, qr_code) 
+VALUES (?, ?, ?, ?, ?)
+
+// Teacher insertion
+INSERT INTO teachers (teacher_id, name, email, password) 
+VALUES (?, ?, ?, ?)
+```
+
+<Warning>
+  Student IDs and Teacher IDs must be unique. Attempting to register with an existing ID will fail.
+</Warning>
+
+---
+
+## Logout
+
+**Endpoint:** `logout.php`
+
+**Method:** GET
+
+**Description:** Destroys the current session and redirects to the login page.
+
+### Process Flow
+
+1. Starts session with `session_start()`
+2. Destroys all session data with `session_destroy()`
+3. Redirects to `index.php`
+
+```php
+session_start();
+session_destroy();
+header("Location: index.php");
+```
+
+<Note>
+  No parameters required. This endpoint simply terminates the active session.
+</Note>
+
+---
+
+## Password Reset Flow
+
+### Step 1: Request Password Reset
+
+**Endpoint:** `reset_password.php`
+
+**Method:** POST
+
+**Description:** Initiates password reset by validating user ID and email.
+
+<ParamField body="userID" type="string" required>
+  User's ID (student ID or teacher ID)
+</ParamField>
+
+<ParamField body="email" type="email" required>
+  Email address registered to the account
+</ParamField>
+
+### Process Flow
+
+1. **User Type Detection:**
+   - Numeric ID → Student
+   - ID starting with 'T' → Teacher
+
+2. **Validation:**
+   - Queries appropriate table (`students` or `teachers`)
+   - Matches both `userID` AND `email`
+
+3. **Token Generation:**
+   - Generates secure random token: `bin2hex(random_bytes(32))`
+   - Sets expiry: 1 hour from current time
+   - Stores in database with expiry timestamp
+
+4. **Session Setup:**
+   ```php
+   $_SESSION['reset_token'] = $token;
+   $_SESSION['reset_user_id'] = $userID;
+   $_SESSION['reset_user_type'] = $userType; // 'student' or 'teacher'
+   ```
+
+5. **Redirect:** To `password_reset_form.php`
+
+### Database Updates
+
+```php
+UPDATE students SET reset_token = ?, reset_token_expiry = ? WHERE student_id = ?
+UPDATE teachers SET reset_token = ?, reset_token_expiry = ? WHERE teacher_id = ?
+```
+
+**Error Messages:**
+- "Invalid user ID format."
+- "No account found with that ID and email combination."
+- "Invalid request."
+
+---
+
+### Step 2: Set New Password
+
+**Endpoint:** `update_password.php`
+
+**Method:** POST
+
+**Description:** Updates password after token validation.
+
+<ParamField body="token" type="string" required>
+  Reset token from session
+</ParamField>
+
+<ParamField body="userID" type="string" required>
+  User's ID from session
+</ParamField>
+
+<ParamField body="userType" type="string" required>
+  Either 'student' or 'teacher'
+</ParamField>
+
+<ParamField body="new_password" type="string" required>
+  New password (minimum 8 characters)
+</ParamField>
+
+<ParamField body="confirm_password" type="string" required>
+  Must match new_password
+</ParamField>
+
+### Validation Steps
+
+1. **Password Match:** Verify `new_password === confirm_password`
+2. **Password Length:** Minimum 8 characters
+3. **Token Validation:** Check token exists and not expired
+
+```sql
+SELECT * FROM {table} 
+WHERE {id_field} = ? 
+AND reset_token = ? 
+AND reset_token_expiry > NOW()
+```
+
+### Success Response
+
+1. Hash new password: `password_hash($newPassword, PASSWORD_DEFAULT)`
+2. Update database:
+   ```sql
+   UPDATE {table} 
+   SET password = ?, reset_token = NULL, reset_token_expiry = NULL 
+   WHERE {id_field} = ?
+   ```
+3. Clear reset session variables
+4. Set success message: "Your password has been updated successfully. You can now login with your new password."
+5. Redirect to `index.php`
+
+### Error Messages
+
+- "Passwords do not match."
+- "Password must be at least 8 characters long."
+- "Invalid or expired password reset token."
+- "Invalid request."
+
+<Warning>
+  Reset tokens expire after 1 hour. Users must complete the password reset process within this timeframe.
+</Warning>
+
+---
+
+## Session Management
+
+### Session Variables
+
+**Student Session:**
+```php
+$_SESSION['user_id']      // Database ID
+$_SESSION['user_type']    // 'student'
+$_SESSION['student_id']   // Student identifier
+```
+
+**Teacher Session:**
+```php
+$_SESSION['user_id']      // Database ID
+$_SESSION['user_type']    // 'teacher'
+$_SESSION['teacher_id']   // Teacher identifier (e.g., T1234)
+$_SESSION['teacher_name'] // Teacher's full name
+```
+
+### Protected Pages
+
+All dashboard pages check for valid session:
+
+```php
+if (!isset($_SESSION['user_type']) || $_SESSION['user_type'] !== 'student') {
+    header("Location: index.php");
+    exit();
+}
+```
+
+<Note>
+  Session data is automatically initiated in `config.php` which should be included at the top of every protected page.
+</Note>

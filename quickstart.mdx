@@ -1,80 +1,291 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get your QR Attendance System running in 10 minutes
 ---
 
-## Get started in three steps
+# Quick start
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide will help you set up and start using the QR Attendance System in just a few minutes.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+Before starting, ensure you have completed the [installation](/installation) process.
 </Note>
+
+## Initial setup
+
+<Steps>
+  <Step title="Access the application">
+    Open your web browser and navigate to your installation URL:
+
+    ```
+    https://attendance.example.com
+    ```
+
+    You should see the login page with the QR Attendance System logo.
+  </Step>
+
+  <Step title="Verify admin access">
+    The system creates a default admin account automatically. While not required for basic usage, you can verify admin access:
+
+    - **Username**: `admin`
+    - **Password**: `admin123`
+
+    <Warning>
+    Change the default admin password in production by updating the database directly or through a custom admin panel.
+    </Warning>
+  </Step>
+</Steps>
+
+## Register a teacher account
+
+<Steps>
+  <Step title="Navigate to registration">
+    From the login page, click the **Register** link.
+  </Step>
+
+  <Step title="Select Teacher Registration tab">
+    Click on the **Teacher Registration** tab in the registration form.
+  </Step>
+
+  <Step title="Fill in teacher details">
+    Enter the following information:
+
+    - **Teacher ID**: Must follow format `T` followed by 4 digits (e.g., `T1234`)
+    - **Full Name**: Your full name
+    - **Email**: Valid email address
+    - **Password**: Minimum 8 characters
+    - **Confirm Password**: Must match password
+
+    ```
+    Teacher ID: T1001
+    Name: John Smith
+    Email: john.smith@school.edu
+    Password: ••••••••
+    ```
+  </Step>
+
+  <Step title="Complete registration">
+    Click **Create Teacher Account**. You'll see a success message and can now log in.
+  </Step>
+</Steps>
+
+## Register student accounts
+
+<Steps>
+  <Step title="Navigate to registration">
+    From the login page, click the **Register** link.
+  </Step>
+
+  <Step title="Select Student Registration tab">
+    Ensure the **Student Registration** tab is active (default).
+  </Step>
+
+  <Step title="Fill in student details">
+    Enter student information:
+
+    - **Student ID**: Any unique identifier (e.g., `S12345`)
+    - **Name**: Student's full name
+    - **Email**: Valid email address
+    - **Password**: Minimum 8 characters
+    - **Confirm Password**: Must match password
+
+    ```
+    Student ID: S12345
+    Name: Jane Doe
+    Email: jane.doe@students.edu
+    Password: ••••••••
+    ```
+  </Step>
+
+  <Step title="Save QR code">
+    Upon successful registration, a unique QR code is displayed. Students should:
+    - Take a screenshot of the QR code
+    - Or access it anytime from their student dashboard
+
+    The QR code contains the student ID and is used for attendance marking.
+  </Step>
+</Steps>
+
+<Tip>
+Register 2-3 test student accounts to fully explore the system features.
+</Tip>
+
+## Create your first class
+
+<Steps>
+  <Step title="Login as teacher">
+    Log in using the teacher credentials you created:
+
+    ```
+    User ID: T1001
+    Password: ••••••••
+    ```
+
+    You'll be redirected to the teacher dashboard.
+  </Step>
+
+  <Step title="Navigate to class management">
+    Click **Manage Classes** from the teacher dashboard navigation.
+  </Step>
+
+  <Step title="Create a new class">
+    Under "Create New Class":
+    - Enter a class name (e.g., "Computer Science 101")
+    - Click **Create Class**
+
+    ```
+    Class Name: Computer Science 101
+    ```
+
+    You'll see a success message and the new class will appear in your class list.
+  </Step>
+
+  <Step title="Add students to class">
+    In the class card:
+    - Enter a student ID (e.g., `S12345`)
+    - Click **Add Student**
+
+    Repeat for each student you want to enroll.
+
+    <Note>
+    Students can only be enrolled in one class per teacher, but can be in classes from different teachers.
+    </Note>
+  </Step>
+</Steps>
+
+## Configure class schedule
+
+<Steps>
+  <Step title="Navigate to schedule management">
+    From the teacher dashboard, click **Manage Schedule**.
+  </Step>
+
+  <Step title="Select your class">
+    Choose "Computer Science 101" from the class dropdown.
+  </Step>
+
+  <Step title="Add a schedule">
+    Fill in the schedule details:
+
+    - **Day of Week**: Select the class day (e.g., Monday)
+    - **Start Time**: Enter class start time (e.g., `09:00`)
+    - **Grace Period**: Set late arrival tolerance in minutes (default: 15)
+
+    ```
+    Day: Monday
+    Start Time: 09:00 AM
+    Grace Period: 15 minutes
+    ```
+
+    Click **Update Schedule**.
+  </Step>
+
+  <Step title="Add more schedule slots (optional)">
+    Repeat for other days if the class meets multiple times per week.
+  </Step>
+</Steps>
+
+## Mark attendance
+
+<Steps>
+  <Step title="Open the scanner">
+    From the teacher dashboard, click **Open Scanner**.
+
+    <Warning>
+    Camera access requires HTTPS. If prompted, allow camera permissions in your browser.
+    </Warning>
+  </Step>
+
+  <Step title="Student displays QR code">
+    The student logs into their dashboard and displays their QR code on screen.
+  </Step>
+
+  <Step title="Scan the QR code">
+    Point your device camera at the student's QR code. The system will:
+    - Verify the student is enrolled in your class
+    - Check if today matches a scheduled class day
+    - Determine if attendance is on-time or late based on current time vs start time + grace period
+    - Record the attendance
+
+    You'll see a confirmation message:
+    - ✅ "On-time attendance marked for Student ID: S12345"
+    - ⚠️ "Late attendance marked for Student ID: S12345"
+  </Step>
+
+  <Step title="View attendance">
+    Return to the teacher dashboard, select your class, and view today's attendance under "Today's Attendance" section.
+  </Step>
+</Steps>
+
+## Student workflow
+
+Students can check their attendance and view schedules:
+
+<Steps>
+  <Step title="Login to student dashboard">
+    Students log in with their credentials:
+
+    ```
+    User ID: S12345
+    Password: ••••••••
+    ```
+  </Step>
+
+  <Step title="View QR code">
+    The dashboard displays their unique QR code prominently. Students can show this during class for attendance.
+  </Step>
+
+  <Step title="Check attendance history">
+    The dashboard shows:
+    - Total check-ins
+    - Days attended
+    - Recent attendance history with dates, times, and status (on-time/late/absent)
+  </Step>
+
+  <Step title="View class schedule">
+    Click the **Schedule** tab to see:
+    - Class name and teacher
+    - Days and times
+    - Grace period for each session
+  </Step>
+</Steps>
+
+## What's next?
+
+Now that you have the basics working:
+
+<CardGroup cols={2}>
+  <Card title="Excel Import" icon="file-excel" href="/features/class-management">
+    Import entire class rosters from Excel files
+  </Card>
+  <Card title="Attendance Tracking" icon="chart-line" href="/features/attendance-tracking">
+    Learn about advanced attendance features
+  </Card>
+  <Card title="Teacher Guide" icon="chalkboard-user" href="/guides/teacher-guide">
+    Complete teacher feature overview
+  </Card>
+  <Card title="Student Guide" icon="user" href="/guides/student-guide">
+    Complete student feature overview
+  </Card>
+</CardGroup>
+
+## Common issues
+
+### QR scanner not working
+- Ensure you're using HTTPS (required for camera access)
+- Check browser permissions for camera access
+- Try a different browser (Chrome/Firefox recommended)
+
+### Student not found when scanning
+- Verify student is enrolled in the teacher's class
+- Check that today matches a scheduled class day in **Manage Schedule**
+- Ensure student ID matches exactly (case-sensitive)
+
+### Cannot add student to class
+- Student must be registered first
+- Student can only be in one class per teacher
+- Verify student ID is correct
+
+<Tip>
+For detailed troubleshooting, see the [Installation guide](/installation#troubleshooting) or check the [API documentation](/api/attendance-processing).
+</Tip>

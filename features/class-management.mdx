@@ -1,0 +1,385 @@
+---
+title: 'Class Management'
+description: 'Create and manage classes, add or remove students, and import/export class rosters'
+---
+
+## Overview
+
+The Class Management system allows teachers to create multiple classes, enroll students, and manage class rosters. Teachers can add students individually, import bulk enrollments from Excel files, and export class rosters for record-keeping.
+
+## Creating Classes
+
+Teachers can create unlimited classes to organize their students. Each class is tied to a specific teacher and maintains its own roster and schedule.
+
+### Class Creation Form
+
+```php manage_classes.php:32-36
+case 'create_class':
+    $class_name = trim($_POST['class_name']);
+    $stmt = $pdo->prepare("INSERT INTO classes (teacher_id, name) VALUES (?, ?)");
+    $stmt->execute([$teacher_id, $class_name]);
+    $_SESSION['success'] = "Class created successfully";
+    break;
+```
+
+<Info>
+Class names should be descriptive and unique within your own classes. Common naming conventions include course code, subject, or period (e.g., "CS101", "Math Period 1").
+</Info>
+
+### Class Properties
+
+<CardGroup cols={2}>
+  <Card title="Teacher Assignment" icon="user-tie">
+    Each class belongs to exactly one teacher
+  </Card>
+  <Card title="Class Name" icon="tag">
+    User-defined name to identify the class
+  </Card>
+  <Card title="Auto-generated ID" icon="hashtag">
+    System assigns unique ID automatically
+  </Card>
+  <Card title="Unlimited Classes" icon="infinity">
+    Teachers can create as many classes as needed
+  </Card>
+</CardGroup>
+
+## Adding Students
+
+Students can be added to classes individually by entering their student ID. The system validates the student exists and enforces the one-class-per-teacher rule.
+
+### Manual Student Addition
+
+```php manage_classes.php:61-98
+function addStudent($pdo, $class_id, $student_id, $teacher_id) {
+    // Verify class belongs to teacher
+    $stmt = $pdo->prepare("SELECT id FROM classes WHERE id = ? AND teacher_id = ?");
+    $stmt->execute([$class_id, $teacher_id]);
+    if ($stmt->rowCount() === 0) {
+        $_SESSION['error'] = "Invalid class selected";
+        return;
+    }
+    
+    // Check if student exists
+    $stmt = $pdo->prepare("SELECT * FROM students WHERE student_id = ?");
+    $stmt->execute([$student_id]);
+    if ($stmt->rowCount() > 0) {
+        // Check if student is already in one of THIS teacher's classes
+        $stmt = $pdo->prepare("
+            SELECT cs.class_id, c.name 
+            FROM class_students cs
+            JOIN classes c ON cs.class_id = c.id
+            WHERE cs.student_id = ? AND c.teacher_id = ?
+        ");
+        $stmt->execute([$student_id, $teacher_id]);
+        $existing_enrollment = $stmt->fetch();
+        
+        if ($existing_enrollment) {
+            if ($existing_enrollment['class_id'] == $class_id) {
+                $_SESSION['error'] = "Student is already enrolled in this class";
+            } else {
+                $_SESSION['error'] = "Student is already enrolled in your class: " . $existing_enrollment['name'] . 
+                                    ". A student can only be enrolled in one class per teacher.";
+            }
+        } else {
+            $stmt = $pdo->prepare("INSERT INTO class_students (class_id, student_id) VALUES (?, ?)");
+            $stmt->execute([$class_id, $student_id]);
+            $_SESSION['success'] = "Student added successfully";
+        }
+    } else {
+        $_SESSION['error'] = "Student ID not found";
+    }
+}
+```
+
+### Validation Checks
+
+1. **Class Ownership** - Verify the class belongs to the current teacher
+2. **Student Exists** - Confirm the student ID is registered in the system
+3. **No Duplicates** - Prevent adding the same student twice to the same class
+4. **One Class Per Teacher** - Enforce the rule that students can only be in one class per teacher
+
+<Warning>
+**Important Rule:** A student can be enrolled in only ONE class per teacher. However, students can be enrolled in classes from different teachers simultaneously.
+</Warning>
+
+## Removing Students
+
+Students can be removed from classes individually. This does not delete the student account or their attendance history.
+
+### Student Removal
+
+```php manage_classes.php:43-47
+case 'remove_student':
+    $stmt = $pdo->prepare("DELETE FROM class_students WHERE class_id = ? AND student_id = ?");
+    $stmt->execute([$_POST['class_id'], $_POST['student_id']]);
+    $_SESSION['success'] = "Student removed successfully";
+    break;
+```
+
+<Info>
+Removing a student from a class does NOT delete their attendance records. Historical attendance data is preserved for reporting purposes.
+</Info>
+
+## Excel Import
+
+Teachers can import multiple students at once using Excel (.xlsx, .xls) or CSV files. This feature requires the PhpSpreadsheet library.
+
+### Import Format
+
+The Excel file should have the following columns:
+
+| Column A | Column B | Column C |
+|----------|----------|----------|
+| Student ID | Full Name | Email |
+
+<Note>
+**Optional Header Row:** You can check the "File has header row" option to skip the first row during import.
+</Note>
+
+### Import Processing
+
+```php manage_classes.php:166-219
+try {
+    if ($file_extension == 'csv') {
+        $reader = new \PhpOffice\PhpSpreadsheet\Reader\Csv();
+    } elseif ($file_extension == 'xlsx') {
+        $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+    } else {
+        $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xls();
+    }
+    
+    $spreadsheet = $reader->load($_FILES['excel_file']['tmp_name']);
+    $worksheet = $spreadsheet->getActiveSheet();
+    $rows = $worksheet->toArray();
+    
+    // Skip header row if it exists
+    $start_row = (isset($_POST['has_header']) && $_POST['has_header'] == 1) ? 1 : 0;
+    
+    // Begin transaction
+    $pdo->beginTransaction();
+    
+    $imported = 0;
+    $skipped = 0;
+    $errors = [];
+    
+    for ($i = $start_row; $i < count($rows); $i++) {
+        $row = $rows[$i];
+        
+        // Skip empty rows
+        if (empty($row[0])) continue;
+        
+        $student_id = trim($row[0]);
+        
+        // Check if student exists
+        $stmt = $pdo->prepare("SELECT * FROM students WHERE student_id = ?");
+        $stmt->execute([$student_id]);
+        $student = $stmt->fetch();
+        
+        if (!$student) {
+            // Create new student if we have enough data
+            if (!empty($row[1]) && !empty($row[2])) {
+                $name = trim($row[1]);
+                $email = trim($row[2]);
+                $default_password = password_hash('changeme123', PASSWORD_DEFAULT);
+                
+                $stmt = $pdo->prepare("INSERT INTO students (student_id, name, email, password) VALUES (?, ?, ?, ?)");
+                if (!$stmt->execute([$student_id, $name, $email, $default_password])) {
+                    $errors[] = "Failed to create student: $student_id";
+                    continue;
+                }
+            }
+        }
+        // ... enrollment logic
+    }
+}
+```
+
+### Auto-Create Students
+
+If a student ID in the import file doesn't exist in the system, the import process will automatically create the student account with:
+
+- **Default Password:** `changeme123`
+- **Student ID:** From Column A
+- **Name:** From Column B
+- **Email:** From Column C
+
+<Warning>
+New students created during import receive the default password `changeme123`. Students should change this password immediately upon first login.
+</Warning>
+
+### Import Results
+
+After import, the system displays:
+
+- **Success Count:** Number of students successfully imported
+- **Skipped Count:** Number of students skipped (duplicates, errors)
+- **Error Details:** Collapsible list of specific errors encountered
+
+```php manage_classes.php:247-258
+$message = "Successfully imported $imported students.";
+if ($skipped > 0) {
+    $message .= " Skipped $skipped students.";
+}
+
+$_SESSION['success'] = $message;
+
+if (!empty($errors)) {
+    $_SESSION['import_errors'] = $errors;
+}
+```
+
+## Excel Export
+
+Export class rosters to Excel format for record-keeping, printing, or further processing.
+
+### Export Process
+
+```php manage_classes.php:284-310
+// Get students in the class
+$stmt = $pdo->prepare("
+    SELECT s.student_id, s.name, s.email 
+    FROM students s
+    JOIN class_students cs ON s.student_id = cs.student_id
+    WHERE cs.class_id = ?
+    ORDER BY s.name
+");
+$stmt->execute([$class_id]);
+$students = $stmt->fetchAll();
+
+// Create spreadsheet
+$spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+$sheet = $spreadsheet->getActiveSheet();
+
+// Add headers
+$sheet->setCellValue('A1', 'Student ID');
+$sheet->setCellValue('B1', 'Name');
+$sheet->setCellValue('C1', 'Email');
+
+// Add data
+$row = 2;
+foreach ($students as $student) {
+    $sheet->setCellValue('A' . $row, $student['student_id']);
+    $sheet->setCellValue('B' . $row, $student['name']);
+    $sheet->setCellValue('C' . $row, $student['email']);
+    $row++;
+}
+```
+
+### Export Features
+
+<CardGroup cols={2}>
+  <Card title="Auto-sizing" icon="arrows-left-right">
+    Columns automatically adjust to content width
+  </Card>
+  <Card title="Sorted Data" icon="arrow-down-a-z">
+    Students sorted alphabetically by name
+  </Card>
+  <Card title="File Naming" icon="file">
+    Files named as {ClassName}_roster.xlsx
+  </Card>
+  <Card title="Direct Download" icon="download">
+    File downloads immediately to browser
+  </Card>
+</CardGroup>
+
+## Deleting Classes
+
+Deleting a class removes all associated data including student enrollments, schedules, and attendance records. This operation is irreversible.
+
+### Delete Class Function
+
+```php manage_classes.php:101-136
+function deleteClass($pdo, $class_id, $teacher_id) {
+    // Begin transaction to ensure all operations succeed or fail together
+    $pdo->beginTransaction();
+    
+    try {
+        // Verify ownership
+        $stmt = $pdo->prepare("SELECT * FROM classes WHERE id = ? AND teacher_id = ?");
+        $stmt->execute([$class_id, $teacher_id]);
+        if ($stmt->rowCount() > 0) {
+            // Delete attendance records for this class
+            $stmt = $pdo->prepare("DELETE FROM attendance WHERE class_id = ?");
+            $stmt->execute([$class_id]);
+            
+            // Delete schedules for this class
+            $stmt = $pdo->prepare("DELETE FROM class_schedules WHERE class_id = ?");
+            $stmt->execute([$class_id]);
+            
+            // Delete students from class
+            $stmt = $pdo->prepare("DELETE FROM class_students WHERE class_id = ?");
+            $stmt->execute([$class_id]);
+            
+            // Delete class
+            $stmt = $pdo->prepare("DELETE FROM classes WHERE id = ?");
+            $stmt->execute([$class_id]);
+            
+            $pdo->commit();
+            $_SESSION['success'] = "Class deleted successfully";
+        } else {
+            $pdo->rollBack();
+            $_SESSION['error'] = "You don't have permission to delete this class";
+        }
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        $_SESSION['error'] = "Error deleting class: " . $e->getMessage();
+    }
+}
+```
+
+### What Gets Deleted
+
+<Warning>
+Deleting a class permanently removes:
+- The class itself
+- All student enrollments in that class
+- All class schedules
+- **All attendance records for that class**
+
+This action cannot be undone!
+</Warning>
+
+## One Class Per Teacher Rule
+
+The system enforces a business rule where each student can only be enrolled in ONE class per teacher, though they can be in multiple classes from different teachers.
+
+### Rule Explanation
+
+```php manage_classes.php:354-356
+<div class="info-banner">
+    <strong>Note:</strong> Students can be enrolled in multiple classes from different teachers, but only in one class per teacher.
+</div>
+```
+
+### Why This Rule?
+
+This rule prevents scenarios where:
+- A student would need to scan QR codes multiple times for the same teacher
+- Confusion about which class a student is attending
+- Duplicate attendance records for the same time slot
+
+### Cross-Teacher Enrollment
+
+<Info>
+While students are limited to one class per teacher, they can simultaneously be enrolled in:
+- Professor A's Math class
+- Professor B's Science class  
+- Professor C's English class
+</Info>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Descriptive Names" icon="pen">
+    Use clear class names like "CS101-Fall2024" instead of generic names
+  </Card>
+  <Card title="Regular Exports" icon="download">
+    Export class rosters periodically for backup and record-keeping
+  </Card>
+  <Card title="Bulk Import" icon="file-excel">
+    Use Excel import for enrolling 10+ students to save time
+  </Card>
+  <Card title="Verify Before Delete" icon="triangle-exclamation">
+    Double-check before deleting classes as attendance history will be lost
+  </Card>
+</CardGroup>
