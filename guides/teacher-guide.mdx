@@ -337,6 +337,10 @@ Only students with existing attendance records show the status dropdown. Student
 
 ### Updating email
 
+<Warning>
+Email update functionality for teachers is currently not fully implemented. The UI form exists but requires the `update_email.php` file to be created. Students can update their email directly from their dashboard.
+</Warning>
+
 <Steps>
   <Step title="Open email modal">
     Click **Update Email** in the profile actions section.
@@ -351,9 +355,13 @@ Only students with existing attendance records show the status dropdown. Student
   </Step>
 
   <Step title="Update">
-    Click **Update Email**. You'll see a success message if updated.
+    Click **Update Email**. Currently, this will result in an error as the endpoint is not implemented.
   </Step>
 </Steps>
+
+<Note>
+To implement email updates for teachers, create `update_email.php` following the same pattern as the student dashboard's inline email update functionality (see `student_dashboard.php:39-53`).
+</Note>
 
 ## Best practices
 

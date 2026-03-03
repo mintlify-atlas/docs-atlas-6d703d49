@@ -145,13 +145,21 @@ SELECT email FROM teachers WHERE teacher_id = ?
 
 ## Update Email Address
 
-**Endpoint:** `update_email.php`
+<Warning>
+Email update functionality for teachers is currently **not implemented**. The teacher dashboard UI references `update_email.php`, but this file does not exist in the source code.
+</Warning>
+
+**Intended Endpoint:** `update_email.php` (not implemented)
 
 **Method:** POST
 
 **Authentication:** Teacher session required
 
-### Request Parameters
+### Expected Implementation
+
+To implement this feature, create `update_email.php` with the following functionality:
+
+**Request Parameters:**
 
 <ParamField body="new_email" type="email" required>
   New email address
@@ -161,7 +169,7 @@ SELECT email FROM teachers WHERE teacher_id = ?
   Current password for verification
 </ParamField>
 
-### Validation Process
+**Suggested Validation Process:**
 
 1. **Password Verification:**
    ```php
@@ -170,11 +178,13 @@ SELECT email FROM teachers WHERE teacher_id = ?
    $teacher = $stmt->fetch();
    
    if (!password_verify($password, $teacher['password'])) {
-       // Error: incorrect password
+       $_SESSION['error'] = "Incorrect password";
+       header("Location: teacher_dashboard.php");
+       exit();
    }
    ```
 
-2. **Email Uniqueness:**
+2. **Email Uniqueness Check:**
    ```sql
    SELECT COUNT(*) FROM teachers 
    WHERE email = ? AND teacher_id != ?
@@ -185,16 +195,9 @@ SELECT email FROM teachers WHERE teacher_id = ?
    UPDATE teachers SET email = ? WHERE teacher_id = ?
    ```
 
-### Response Messages
-
-**Success:**
-```html
-<div class="message success">Email updated successfully</div>
-```
-
-**Errors:**
-- "Email already in use by another account"
-- "Incorrect password"
+<Note>
+Students can update their email through `student_dashboard.php` (inline processing). Reference that implementation for consistency.
+</Note>
 
 ---
 
