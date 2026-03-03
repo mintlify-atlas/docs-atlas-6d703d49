@@ -1,0 +1,94 @@
+{
+  "projectType": "saas",
+  "projectName": "QR Attendance System",
+  "projectDescription": "A complete attendance management system using QR codes for students and teachers with class scheduling and reporting.",
+  "theme": "maple",
+  "primaryColor": "#4361ee",
+  "lightColor": "#7c93f5",
+  "darkColor": "#2d46b9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "User Guides",
+            "pages": [
+              "guides/student-guide",
+              "guides/teacher-guide",
+              "guides/admin-guide"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/qr-attendance",
+              "features/class-management",
+              "features/schedule-management",
+              "features/attendance-tracking"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/database-setup",
+              "configuration/email-configuration",
+              "configuration/security"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Components",
+            "pages": [
+              "api/authentication",
+              "api/student-management",
+              "api/teacher-management",
+              "api/class-management",
+              "api/attendance-processing"
+            ]
+          },
+          {
+            "group": "Database Schema",
+            "pages": [
+              "api/database-schema"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "QR Code-based attendance marking",
+    "Separate dashboards for students and teachers",
+    "Class and schedule management",
+    "Real-time attendance tracking with on-time/late status",
+    "Excel import/export for student rosters",
+    "Password reset functionality",
+    "Grace period configuration for late arrivals",
+    "Attendance history and statistics"
+  ],
+  "publicApiSurface": [
+    "login_process.php - User authentication",
+    "register.php - Student and teacher registration",
+    "student_dashboard.php - Student attendance portal",
+    "teacher_dashboard.php - Teacher management portal",
+    "scanner.php - QR code scanner interface",
+    "process_attendance.php - Attendance recording endpoint",
+    "manage_classes.php - Class roster management",
+    "manage_schedule.php - Schedule configuration",
+    "forgot_password.php - Password reset request",
+    "reset_password.php - Password reset handler"
+  ]
+}
